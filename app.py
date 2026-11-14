@@ -38,7 +38,7 @@ if st.button("მიპასუხე") and question.strip():
             # ინტერნეტში ძიება
             if use_search and search_key:
                 try:
-                    response = requests.get(
+                    search_response = requests.get(
                         "https://serpapi.com/search.json",
                         params={
                             "engine": "google",
@@ -47,11 +47,10 @@ if st.button("მიპასუხე") and question.strip():
                             "hl": "ka",
                             "gl": "ge"
                         },
-                        timeout=12
+                        timeout=15
                     )
-
-                    response.raise_for_status()
-                    search_data = response.json()
+                    search_response.raise_for_status()
+                    search_data = search_response.json()
                     results = search_data.get("organic_results", [])
 
                     for item in results[:5]:
@@ -61,25 +60,30 @@ if st.button("მიპასუხე") and question.strip():
                         )
 
                 except requests.exceptions.RequestException:
-                    st.warning("ინტერნეტში ძიება ვერ მოხერხდა.")
+                    st.warning("ინტერნეტში ძიება ვერ მოხერხდა. პასუხს ძიების გარეშე გავაგრძელებ.")
 
             elif use_search and not search_key:
-                st.warning("ძიების გასაღები ვერ მოიძებნა.")
+                st.warning("ძიების გასაღები ვერ მოიძებნა. პასუხს ძიების გარეშე გავაგრძელებ.")
 
             # AI-ს ინსტრუქცია
+            system_prompt = (
+                "შენ ხარ ნაცარქექია — მეგობრული ქართული AI ასისტენტი. "
+                "ყოველთვის უპასუხე გამართული, ბუნებრივი ქართულით. "
+                "გამოიყენე სწორი გრამატიკა და სასვენი ნიშნები. "
+                "არ აურიო ქართულში სხვა ენები, თუ ამას მომხმარებელი "
+                "სპეციალურად არ ითხოვს. "
+                "არ გაიმეორო ერთი და იგივე აზრი. "
+                "უპასუხე პირდაპირ, გასაგებად და შინაარსიანად. "
+                "მარტივ კითხვაზე მოკლე პასუხი გასცი, რთულზე კი საჭირო დეტალები დაამატე. "
+                "არ მოიგონო ფაქტები. თუ რამე არ იცი, პირდაპირ თქვი. "
+                "არ გამოაჩინო შიდა მსჯელობა, სამუშაო ჩანაწერები ან ფარული ანალიზი; "
+                "მომხმარებელს აჩვენე მხოლოდ საბოლოო პასუხი."
+            )
+
             messages = [
                 {
                     "role": "system",
-                    "content": (
-                        "შენ ხარ ნაცარქექია — მეგობრული ქართული AI ასისტენტი. "
-                        "ყოველთვის უპასუხე გამართული, ბუნებრივი ქართულით. "
-                        "გამოიყენე სწორი გრამატიკა და სასვენი ნიშნები. "
-                        "არ აურიო ქართულში სხვა ენები, თუ ამას მომხმარებელი "
-                        "სპეციალურად არ ითხოვს. "
-                        "არ გაიმეორო ერთი და იგივე აზრი. "
-                        "უპასუხე გასაგებად და შინაარსიანად. "
-                        "არ მოიგონო ფაქტები. თუ რამე არ იცი, პირდაპირ თქვი."
-                    )
+                    "content": system_prompt
                 }
             ]
 
@@ -110,9 +114,13 @@ if st.button("მიპასუხე") and question.strip():
                         "model": "openrouter/free",
                         "messages": messages,
                         "temperature": 0.3,
-                        "max_tokens": 1200
+                        "max_tokens": 3000,
+                        "reasoning": {
+                            "effort": "low",
+                            "exclude": True
+                        }
                     },
-                    timeout=60
+                    timeout=90
                 )
 
                 ai_response.raise_for_status()
@@ -122,14 +130,43 @@ if st.button("მიპასუხე") and question.strip():
 
                 if not choices:
                     st.error("AI-მ პასუხი ვერ დააბრუნა.")
+                    st.caption("სერვერის პასუხის ტექნიკური დეტალები:")
                     st.code(str(data)[:1500])
                     st.stop()
 
-                answer = choices[0].get("message", {}).get("content")
+                choice = choices[0]
+                message = choice.get("message") or {}
+                answer = message.get("content")
+                finish_reason = choice.get("finish_reason")
+
+                if isinstance(answer, list):
+                    answer = "\n".join(
+                        part.get("text", "")
+                        for part in answer
+                        if isinstance(part, dict) and part.get("text")
+                    )
 
                 if not isinstance(answer, str) or not answer.strip():
-                    st.error("AI-მ ცარიელი პასუხი დააბრუნა.")
-                    st.code(str(data)[:1500])
+                    if finish_reason == "length":
+                        st.error(
+                            "მოდელმა გამოყო დრო შიდა დამუშავებისთვის, "
+                            "მაგრამ საბოლოო პასუხი ვერ დაასრულა. "
+                            "სცადე კითხვა უფრო მოკლედ დასვა ან ხელახლა გაგზავნო."
+                        )
+                    else:
+                        st.error(
+                            "AI-მ საბოლოო ტექსტური პასუხი არ დააბრუნა. "
+                            "სცადე ხელახლა რამდენიმე წამში."
+                        )
+
+                    usage = data.get("usage", {})
+                    if usage:
+                        st.caption("ტექნიკური ინფორმაცია:")
+                        st.code(str({
+                            "finish_reason": finish_reason,
+                            "usage": usage,
+                            "model": data.get("model")
+                        })[:1500])
                     st.stop()
 
                 # პასუხის ჩვენება
@@ -177,4 +214,5 @@ if st.button("მიპასუხე") and question.strip():
 
             except Exception as e:
                 st.error(f"შეცდომა: {e}")
+
 
