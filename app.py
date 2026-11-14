@@ -1,6 +1,8 @@
 
-import streamlit as st
+import time
+
 import requests
+import streamlit as st
 
 st.set_page_config(
     page_title="ნაცარქექია",
@@ -31,7 +33,7 @@ if st.button("მიპასუხე") and question.strip():
 
     else:
         with st.spinner("ნაცარქექია ფიქრობს..."):
-
+            started_at = time.monotonic()
             search_context = ""
             results = []
 
@@ -47,7 +49,7 @@ if st.button("მიპასუხე") and question.strip():
                             "hl": "ka",
                             "gl": "ge"
                         },
-                        timeout=15
+                        timeout=(5, 8)
                     )
                     search_response.raise_for_status()
                     search_data = search_response.json()
@@ -60,23 +62,27 @@ if st.button("მიპასუხე") and question.strip():
                         )
 
                 except requests.exceptions.RequestException:
-                    st.warning("ინტერნეტში ძიება ვერ მოხერხდა. პასუხს ძიების გარეშე გავაგრძელებ.")
+                    st.warning(
+                        "ინტერნეტში ძიება დროულად ვერ დასრულდა. "
+                        "პასუხს ძიების გარეშე გავაგრძელებ."
+                    )
 
             elif use_search and not search_key:
-                st.warning("ძიების გასაღები ვერ მოიძებნა. პასუხს ძიების გარეშე გავაგრძელებ.")
+                st.warning(
+                    "ძიების გასაღები ვერ მოიძებნა. "
+                    "პასუხს ძიების გარეშე გავაგრძელებ."
+                )
 
-            # AI-ს ინსტრუქცია
             system_prompt = (
                 "შენ ხარ ნაცარქექია — მეგობრული ქართული AI ასისტენტი. "
                 "ყოველთვის უპასუხე გამართული, ბუნებრივი ქართულით. "
                 "გამოიყენე სწორი გრამატიკა და სასვენი ნიშნები. "
-                "არ აურიო ქართულში სხვა ენები, თუ ამას მომხმარებელი "
+                "არ აურიო ქართულში სხვა ენები, თუ მომხმარებელი ამას "
                 "სპეციალურად არ ითხოვს. "
                 "არ გაიმეორო ერთი და იგივე აზრი. "
-                "უპასუხე პირდაპირ, გასაგებად და შინაარსიანად. "
-                "მარტივ კითხვაზე მოკლე პასუხი გასცი, რთულზე კი საჭირო დეტალები დაამატე. "
+                "უპასუხე პირდაპირ და გასაგებად. "
+                "მარტივ კითხვაზე მოკლედ უპასუხე, რთულზე კი საჭირო დეტალები დაამატე. "
                 "არ მოიგონო ფაქტები. თუ რამე არ იცი, პირდაპირ თქვი. "
-                "არ გამოაჩინო შიდა მსჯელობა, სამუშაო ჩანაწერები ან ფარული ანალიზი; "
                 "მომხმარებელს აჩვენე მხოლოდ საბოლოო პასუხი."
             )
 
@@ -87,10 +93,9 @@ if st.button("მიპასუხე") and question.strip():
                 }
             ]
 
-            # წინა საუბრის დამატება
-            messages.extend(st.session_state.chat_history)
+            # ბოლო 8 შეტყობინება
+            messages.extend(st.session_state.chat_history[-8:])
 
-            # მიმდინარე კითხვის დამატება
             user_message = (
                 f"მომხმარებლის კითხვა: {question}\n\n"
                 f"ინტერნეტში მოძიებული ინფორმაცია:\n"
@@ -114,24 +119,27 @@ if st.button("მიპასუხე") and question.strip():
                         "model": "openrouter/free",
                         "messages": messages,
                         "temperature": 0.3,
-                        "max_tokens": 3000,
-                        "reasoning": {
-                            "effort": "low",
-                            "exclude": True
-                        }
+                        "max_tokens": 900
                     },
-                    timeout=90
+                    timeout=(8, 45)
                 )
 
                 ai_response.raise_for_status()
                 data = ai_response.json()
 
+                if data.get("error"):
+                    st.error("AI სერვერმა შეცდომა დააბრუნა.")
+                    st.code(str(data["error"])[:1200])
+                    st.stop()
+
                 choices = data.get("choices", [])
 
                 if not choices:
-                    st.error("AI-მ პასუხი ვერ დააბრუნა.")
-                    st.caption("სერვერის პასუხის ტექნიკური დეტალები:")
-                    st.code(str(data)[:1500])
+                    st.error(
+                        "AI-მ პასუხი ვერ დააბრუნა. "
+                        "სცადე ხელახლა რამდენიმე წამში."
+                    )
+                    st.code(str(data)[:1200])
                     st.stop()
 
                 choice = choices[0]
@@ -149,31 +157,26 @@ if st.button("მიპასუხე") and question.strip():
                 if not isinstance(answer, str) or not answer.strip():
                     if finish_reason == "length":
                         st.error(
-                            "მოდელმა გამოყო დრო შიდა დამუშავებისთვის, "
-                            "მაგრამ საბოლოო პასუხი ვერ დაასრულა. "
-                            "სცადე კითხვა უფრო მოკლედ დასვა ან ხელახლა გაგზავნო."
+                            "მოდელმა პასუხი ვერ დაასრულა. "
+                            "სცადე კითხვა უფრო მოკლედ დასვა."
                         )
                     else:
                         st.error(
-                            "AI-მ საბოლოო ტექსტური პასუხი არ დააბრუნა. "
-                            "სცადე ხელახლა რამდენიმე წამში."
+                            "AI-მ ტექსტური პასუხი არ დააბრუნა. "
+                            "სერვერი შესაძლოა დატვირთულია — სცადე ხელახლა."
                         )
 
-                    usage = data.get("usage", {})
-                    if usage:
-                        st.caption("ტექნიკური ინფორმაცია:")
-                        st.code(str({
-                            "finish_reason": finish_reason,
-                            "usage": usage,
-                            "model": data.get("model")
-                        })[:1500])
+                    st.caption(
+                        f"მოდელი: {data.get('model', 'უცნობია')} | "
+                        f"დასრულების მიზეზი: {finish_reason}"
+                    )
                     st.stop()
 
                 # პასუხის ჩვენება
                 st.subheader("ნაცარქექიას პასუხი")
                 st.write(answer)
 
-                # საუბრის მეხსიერებაში შენახვა
+                # მეხსიერებაში შენახვა
                 st.session_state.chat_history.append({
                     "role": "user",
                     "content": user_message
@@ -184,9 +187,15 @@ if st.button("მიპასუხე") and question.strip():
                     "content": answer
                 })
 
-                # ბოლო 12 შეტყობინების დატოვება
                 st.session_state.chat_history = (
-                    st.session_state.chat_history[-12:]
+                    st.session_state.chat_history[-8:]
+                )
+
+                # პასუხის დრო და მოდელი
+                elapsed = time.monotonic() - started_at
+                st.caption(
+                    f"პასუხის დრო: {elapsed:.1f} წამი | "
+                    f"მოდელი: {data.get('model', 'უცნობია')}"
                 )
 
                 # გამოყენებული წყაროები
@@ -201,13 +210,17 @@ if st.button("მიპასუხე") and question.strip():
                             st.markdown(f"- [{title}]({link})")
 
             except requests.exceptions.Timeout:
-                st.error("პასუხის მიღებას დიდი დრო დასჭირდა. სცადე ხელახლა.")
+                st.error(
+                    "AI-მ 45 წამში პასუხი ვერ დააბრუნა. "
+                    "უფასო სერვერი შესაძლოა გადატვირთულია. "
+                    "ცოტა ხანში სცადე ხელახლა."
+                )
 
             except requests.exceptions.HTTPError as e:
                 st.error(f"AI სერვერის შეცდომა: {e}")
 
                 if e.response is not None:
-                    st.code(e.response.text[:1500])
+                    st.code(e.response.text[:1200])
 
             except requests.exceptions.RequestException as e:
                 st.error(f"კავშირის შეცდომა: {e}")
