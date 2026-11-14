@@ -127,18 +127,18 @@ if st.button("მიპასუხე") and question.strip():
 
                 ai_response.raise_for_status()
 
-                data = ai_response.json()
+                                data = ai_response.json()
 
-answer = (
-    data.get("choices", [{}])[0]
-    .get("message", {})
-    .get("content")
-)
+                answer = (
+                    data.get("choices", [{}])[0]
+                    .get("message", {})
+                    .get("content")
+                )
 
-if not answer:
-    st.error("AI-მ ცარიელი პასუხი დააბრუნა. სცადე ხელახლა.")
-    st.code(str(data)[:1500])
-    st.stop()
+                if not answer:
+                    st.error("AI-მ ცარიელი პასუხი დააბრუნა. სცადე ხელახლა.")
+                    st.code(str(data)[:1500])
+                    st.stop()
 
                 st.subheader("ნაცარქექიას პასუხი")
                 st.write(answer)
