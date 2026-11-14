@@ -2,50 +2,102 @@
 import streamlit as st
 import requests
 
-st.set_page_config(
-    page_title="ნაცარქექია",
-    page_icon="🧠"
-)
+st.set_page_config(page_title="ნაცარქექია", page_icon="🧠")
 
 st.title("🧠 ნაცარქექია")
-st.write("გამარჯობა! მე ვარ ნაცარქექია.")
-st.write("შენი პირადი საძიებო ასისტენტი.")
+st.write("შენი პირადი ქართული AI ასისტენტი.")
 
 question = st.text_input("მკითხე რამე:")
 
-if st.button("მოძებნე") and question:
-    api_key = st.secrets.get("SERPAPI_API_KEY", "")
+if st.button("მიპასუხე") and question:
+    search_key = st.secrets.get("SERPAPI_API_KEY", "")
+    ai_key = st.secrets.get("OPENROUTER_API_KEY", "")
 
-    if not api_key:
-        st.error("SerpApi გასაღები ვერ მოიძებნა. შეამოწმე Streamlit Secrets.")
+    if not ai_key:
+        st.error("OpenRouter-ის გასაღები ვერ მოიძებნა. შეამოწმე Secrets.")
     else:
-        try:
-            response = requests.get(
-                "https://serpapi.com/search.json",
-                params={
-                    "engine": "google",
-                    "q": question,
-                    "api_key": api_key,
-                    "hl": "ka",
-                    "gl": "ge"
-                },
-                timeout=20
-            )
-            response.raise_for_status()
-            data = response.json()
+        with st.spinner("ნაცარქექია ფიქრობს..."):
+            try:
+                search_context = ""
 
-            results = data.get("organic_results", [])
+                if search_key:
+                    search_response = requests.get(
+                        "https://serpapi.com/search.json",
+                        params={
+                            "engine": "google",
+                            "q": question,
+                            "api_key": search_key,
+                            "hl": "ka",
+                            "gl": "ge"
+                        },
+                        timeout=20
+                    )
+                    search_response.raise_for_status()
+                    search_data = search_response.json()
 
-            if results:
-                st.subheader("ძიების შედეგები")
-                for item in results[:5]:
-                    st.markdown(f"### {item.get('title', 'უსათაურო')}")
-                    st.write(item.get("snippet", ""))
-                    if item.get("link"):
-                        st.markdown(f"[წყაროს ნახვა]({item['link']})")
-            else:
-                st.info("შედეგები ვერ მოიძებნა.")
+                    results = search_data.get("organic_results", [])
 
-        except Exception as e:
-            st.error(f"ძიების შეცდომა: {e}")
+                    for item in results[:5]:
+                        search_context += (
+                            f"\nსათაური: {item.get('title', '')}"
+                            f"\nაღწერა: {item.get('snippet', '')}"
+                            f"\nბმული: {item.get('link', '')}\n"
+                        )
+
+                messages = [
+                    {
+                        "role": "system",
+                        "content": (
+                            "შენ ხარ ნაცარქექია, მეგობრული ქართული AI ასისტენტი. "
+                            "უპასუხე მომხმარებელს ბუნებრივი, გამართული ქართულით. "
+                            "თუ საძიებო ინფორმაცია მოცემულია, გამოიყენე ის პასუხის "
+                            "გასამდიდრებლად. თუ ინფორმაცია არასაკმარისია, "
+                            "პირდაპირ თქვი ეს და ნუ მოიგონებ ფაქტებს."
+                        )
+                    },
+                    {
+                        "role": "user",
+                        "content": (
+                            f"კითხვა: {question}\n\n"
+                            f"ინტერნეტში მოძიებული ინფორმაცია:\n{search_context}\n\n"
+                            "შემიდგინე გასაგები პასუხი ქართულად."
+                        )
+                    }
+                ]
+
+                ai_response = requests.post(
+                    "https://openrouter.ai/api/v1/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {ai_key}",
+                        "Content-Type": "application/json"
+                    },
+                    json={
+                        "model": "openrouter/free",
+                        "messages": messages,
+                        "temperature": 0.7
+                    },
+                    timeout=90
+                )
+
+                ai_response.raise_for_status()
+                answer = ai_response.json()["choices"][0]["message"]["content"]
+
+                st.subheader("ნაცარქექიას პასუხი")
+                st.write(answer)
+
+                if results if search_key else False:
+                    st.subheader("გამოყენებული წყაროები")
+                    for item in results[:5]:
+                        title = item.get("title", "წყარო")
+                        link = item.get("link", "")
+                        if link:
+                            st.markdown(f"- [{title}]({link})")
+
+            except requests.exceptions.HTTPError as e:
+                st.error(f"სერვერის შეცდომა: {e}")
+                if e.response is not None:
+                    st.code(e.response.text[:1000])
+            except Exception as e:
+                st.error(f"შეცდომა: {e}")
+
 
