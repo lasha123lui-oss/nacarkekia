@@ -6,6 +6,8 @@ st.set_page_config(page_title="ნაცარქექია", page_icon="🧠"
 
 st.title("🧠 ნაცარქექია")
 st.write("შენი პირადი ქართული AI ასისტენტი.")
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
 
 question = st.text_input("მკითხე რამე:")
 
@@ -54,23 +56,28 @@ if st.button("მიპასუხე") and question.strip():
                     except requests.exceptions.RequestException:
                         st.warning("ინტერნეტში ძიება ვერ მოხერხდა. პასუხს ძიების გარეშე გავცემ.")
 
-            messages = [
-                {
-                    "role": "system",
-                    "content": (
-                        "შენ ხარ ნაცარქექია, მეგობრული და ჭკვიანი ქართული AI ასისტენტი. "
-                        "ყოველთვის უპასუხე გამართული, ბუნებრივი ქართულით. "
-                        "იყავი გასაგები, ყურადღებიანი და ზუსტი. "
-                        "არ მოიგონო ფაქტები. თუ რამე არ იცი, პირდაპირ თქვი."
-                    )
-                },
-                {
-                    "role": "user",
-                    "content": (
-                        f"მომხმარებლის კითხვა: {question}\n\n"
-                        f"ინტერნეტში მოძიებული ინფორმაცია:\n{search_context}\n\n"
-                        "მიპასუხე ქართულად, გასაგებად და არსებითად."
-                    )
+         messages = [
+    {
+        "role": "system",
+        "content": (
+            "შენ ხარ ნაცარქექია, მეგობრული და ჭკვიანი ქართული AI ასისტენტი. "
+            "ყოველთვის უპასუხე გამართული, ბუნებრივი ქართულით. "
+            "იყავი გასაგები, ყურადღებიანი და ზუსტი. "
+            "არ მოიგონო ფაქტები. თუ რამე არ იცი, პირდაპირ თქვი."
+        )
+    }
+]
+
+messages.extend(st.session_state.chat_history)
+
+messages.append({
+    "role": "user",
+    "content": (
+        f"მომხმარებლის კითხვა: {question}\n\n"
+        f"ინტერნეტში მოძიებული ინფორმაცია:\n{search_context}\n\n"
+        "მიპასუხე ქართულად, გასაგებად და არსებითად."
+    )
+})
                 }
             ]
 
@@ -94,7 +101,17 @@ if st.button("მიპასუხე") and question.strip():
 
                 st.subheader("ნაცარქექიას პასუხი")
                 st.write(answer)
+st.session_state.chat_history.append({
+    "role": "user",
+    "content": messages[-1]["content"]
+})
 
+st.session_state.chat_history.append({
+    "role": "assistant",
+    "content": answer
+})
+
+st.session_state.chat_history = st.session_state.chat_history[-12:]
                 if results:
                     st.subheader("გამოყენებული წყაროები")
                     for item in results[:5]:
