@@ -6,6 +6,8 @@ st.set_page_config(page_title="ნაცარქექია", page_icon="🧠"
 
 st.title("🧠 ნაცარქექია")
 st.write("შენი პირადი ქართული AI ასისტენტი.")
+
+# საუბრის მეხსიერება
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
@@ -17,19 +19,26 @@ use_search = st.checkbox(
 )
 
 if st.button("მიპასუხე") and question.strip():
+
     ai_key = st.secrets.get("OPENROUTER_API_KEY", "")
     search_key = st.secrets.get("SERPAPI_API_KEY", "")
 
     if not ai_key:
         st.error("OpenRouter-ის გასაღები ვერ მოიძებნა. შეამოწმე Secrets.")
+
     else:
         with st.spinner("ნაცარქექია ფიქრობს..."):
+
             search_context = ""
             results = []
 
+            # ინტერნეტში ძიება
             if use_search:
                 if not search_key:
-                    st.warning("ძიების გასაღები ვერ მოიძებნა. პასუხს ინტერნეტის გარეშე გავცემ.")
+                    st.warning(
+                        "ძიების გასაღები ვერ მოიძებნა. "
+                        "პასუხს ინტერნეტის გარეშე გავცემ."
+                    )
                 else:
                     try:
                         response = requests.get(
@@ -43,6 +52,7 @@ if st.button("მიპასუხე") and question.strip():
                             },
                             timeout=12
                         )
+
                         response.raise_for_status()
                         data = response.json()
                         results = data.get("organic_results", [])
@@ -54,32 +64,38 @@ if st.button("მიპასუხე") and question.strip():
                             )
 
                     except requests.exceptions.RequestException:
-                        st.warning("ინტერნეტში ძიება ვერ მოხერხდა. პასუხს ძიების გარეშე გავცემ.")
+                        st.warning(
+                            "ინტერნეტში ძიება ვერ მოხერხდა. "
+                            "პასუხს ძიების გარეშე გავცემ."
+                        )
 
-         messages = [
-    {
-        "role": "system",
-        "content": (
-            "შენ ხარ ნაცარქექია, მეგობრული და ჭკვიანი ქართული AI ასისტენტი. "
-            "ყოველთვის უპასუხე გამართული, ბუნებრივი ქართულით. "
-            "იყავი გასაგები, ყურადღებიანი და ზუსტი. "
-            "არ მოიგონო ფაქტები. თუ რამე არ იცი, პირდაპირ თქვი."
-        )
-    }
-]
-
-messages.extend(st.session_state.chat_history)
-
-messages.append({
-    "role": "user",
-    "content": (
-        f"მომხმარებლის კითხვა: {question}\n\n"
-        f"ინტერნეტში მოძიებული ინფორმაცია:\n{search_context}\n\n"
-        "მიპასუხე ქართულად, გასაგებად და არსებითად."
-    )
-})
+            # AI-ს შეტყობინებები
+            messages = [
+                {
+                    "role": "system",
+                    "content": (
+                        "შენ ხარ ნაცარქექია, მეგობრული და ჭკვიანი "
+                        "ქართული AI ასისტენტი. "
+                        "ყოველთვის უპასუხე გამართული, ბუნებრივი ქართულით. "
+                        "იყავი გასაგები, ყურადღებიანი და ზუსტი. "
+                        "არ მოიგონო ფაქტები. თუ რამე არ იცი, პირდაპირ თქვი."
+                    )
                 }
             ]
+
+            # წინა საუბრის დამატება
+            messages.extend(st.session_state.chat_history)
+
+            # მიმდინარე კითხვის დამატება
+            messages.append({
+                "role": "user",
+                "content": (
+                    f"მომხმარებლის კითხვა: {question}\n\n"
+                    f"ინტერნეტში მოძიებული ინფორმაცია:\n"
+                    f"{search_context}\n\n"
+                    "მიპასუხე ქართულად, გასაგებად და არსებითად."
+                )
+            })
 
             try:
                 ai_response = requests.post(
@@ -97,34 +113,50 @@ messages.append({
                 )
 
                 ai_response.raise_for_status()
+
                 answer = ai_response.json()["choices"][0]["message"]["content"]
 
                 st.subheader("ნაცარქექიას პასუხი")
                 st.write(answer)
-st.session_state.chat_history.append({
-    "role": "user",
-    "content": messages[-1]["content"]
-})
 
-st.session_state.chat_history.append({
-    "role": "assistant",
-    "content": answer
-})
+                # საუბრის შენახვა მეხსიერებაში
+                st.session_state.chat_history.append({
+                    "role": "user",
+                    "content": messages[-1]["content"]
+                })
 
-st.session_state.chat_history = st.session_state.chat_history[-12:]
+                st.session_state.chat_history.append({
+                    "role": "assistant",
+                    "content": answer
+                })
+
+                # ბოლო 12 შეტყობინების დატოვება
+                st.session_state.chat_history = (
+                    st.session_state.chat_history[-12:]
+                )
+
+                # გამოყენებული წყაროები
                 if results:
                     st.subheader("გამოყენებული წყაროები")
+
                     for item in results[:5]:
                         title = item.get("title", "წყარო")
                         link = item.get("link", "")
+
                         if link:
                             st.markdown(f"- [{title}]({link})")
 
             except requests.exceptions.Timeout:
-                st.error("ნაცარქექიას პასუხის მიღებას დიდი დრო დასჭირდა. სცადე ხელახლა.")
+                st.error(
+                    "ნაცარქექიას პასუხის მიღებას დიდი დრო დასჭირდა. "
+                    "სცადე ხელახლა."
+                )
+
             except requests.exceptions.HTTPError as e:
                 st.error(f"AI სერვერის შეცდომა: {e}")
+
                 if e.response is not None:
                     st.code(e.response.text[:1000])
+
             except Exception as e:
                 st.error(f"შეცდომა: {e}")
