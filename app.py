@@ -120,7 +120,7 @@ if st.button("მიპასუხე") and question.strip():
                         "model": "openrouter/free",
                         "messages": messages,
                         "temperature": 0.3,
-"max_tokens": 1200
+"max_tokens": 1200,
                     },
                     timeout=60
                 )
