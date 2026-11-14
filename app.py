@@ -73,7 +73,7 @@ if st.button("მიპასუხე") and question.strip():
             messages = [
                 {
                     "role": "system",
-                    "content":"content": (
+                    "content": (
     "შენ ხარ ნაცარქექია — ქართული ენის მცოდნე, "
     "მეგობრული და ჭკვიანი AI ასისტენტი. "
 
