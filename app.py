@@ -2,7 +2,10 @@
 import streamlit as st
 import requests
 
-st.set_page_config(page_title="ნაცარქექია", page_icon="🧠")
+st.set_page_config(
+    page_title="ნაცარქექია",
+    page_icon="🧠"
+)
 
 st.title("🧠 ნაცარქექია")
 st.write("შენი პირადი ქართული AI ასისტენტი.")
@@ -14,7 +17,7 @@ if "chat_history" not in st.session_state:
 question = st.text_input("მკითხე რამე:")
 
 use_search = st.checkbox(
-    "ინტერნეტშიც მოძებნე პასუხი (შეიძლება მეტი დრო დასჭირდეს)",
+    "ინტერნეტშიც მოძებნე პასუხი",
     value=False
 )
 
@@ -33,65 +36,50 @@ if st.button("მიპასუხე") and question.strip():
             results = []
 
             # ინტერნეტში ძიება
-            if use_search:
-                if not search_key:
-                    st.warning(
-                        "ძიების გასაღები ვერ მოიძებნა. "
-                        "პასუხს ინტერნეტის გარეშე გავცემ."
+            if use_search and search_key:
+                try:
+                    response = requests.get(
+                        "https://serpapi.com/search.json",
+                        params={
+                            "engine": "google",
+                            "q": question,
+                            "api_key": search_key,
+                            "hl": "ka",
+                            "gl": "ge"
+                        },
+                        timeout=12
                     )
-                else:
-                    try:
-                        response = requests.get(
-                            "https://serpapi.com/search.json",
-                            params={
-                                "engine": "google",
-                                "q": question,
-                                "api_key": search_key,
-                                "hl": "ka",
-                                "gl": "ge"
-                            },
-                            timeout=12
+
+                    response.raise_for_status()
+                    search_data = response.json()
+                    results = search_data.get("organic_results", [])
+
+                    for item in results[:5]:
+                        search_context += (
+                            f"\nსათაური: {item.get('title', '')}\n"
+                            f"აღწერა: {item.get('snippet', '')}\n"
                         )
 
-                        response.raise_for_status()
-                        data = response.json()
-                        results = data.get("organic_results", [])
+                except requests.exceptions.RequestException:
+                    st.warning("ინტერნეტში ძიება ვერ მოხერხდა.")
 
-                        for item in results[:5]:
-                            search_context += (
-                                f"\nსათაური: {item.get('title', '')}"
-                                f"\nაღწერა: {item.get('snippet', '')}\n"
-                            )
+            elif use_search and not search_key:
+                st.warning("ძიების გასაღები ვერ მოიძებნა.")
 
-                    except requests.exceptions.RequestException:
-                        st.warning(
-                            "ინტერნეტში ძიება ვერ მოხერხდა. "
-                            "პასუხს ძიების გარეშე გავცემ."
-                        )
-
-            # AI-ს შეტყობინებები
+            # AI-ს ინსტრუქცია
             messages = [
                 {
                     "role": "system",
                     "content": (
-    "შენ ხარ ნაცარქექია — ქართული ენის მცოდნე, "
-    "მეგობრული და ჭკვიანი AI ასისტენტი. "
-
-    "შენი მთავარი წესი არის გამართული ქართული ენა. "
-    "ყოველთვის წერე მხოლოდ ბუნებრივი, სწორი ქართულით. "
-    "არ აურიო ქართულში სხვა ენების სიტყვები, "
-    "თუ მომხმარებელი ამას სპეციალურად არ ითხოვს. "
-
-    "გამოიყენე სწორი ქართული გრამატიკა, "
-    "ბუნებრივი წინადადებები და სასვენი ნიშნები. "
-    "არ გაიმეორო ერთი და იგივე აზრი რამდენჯერმე. "
-    "უპასუხე გასაგებად, მოკლედ და შინაარსიანად. "
-
-    "თუ კითხვა გაუგებარია, მოითხოვე დაზუსტება. "
-    "თუ პასუხი არ იცი, გულწრფელად თქვი. "
-    "არ მოიგონო ფაქტები. "
-    "მომხმარებელს ესაუბრე მეგობრულად და პატივისცემით."
-)
+                        "შენ ხარ ნაცარქექია — მეგობრული ქართული AI ასისტენტი. "
+                        "ყოველთვის უპასუხე გამართული, ბუნებრივი ქართულით. "
+                        "გამოიყენე სწორი გრამატიკა და სასვენი ნიშნები. "
+                        "არ აურიო ქართულში სხვა ენები, თუ ამას მომხმარებელი "
+                        "სპეციალურად არ ითხოვს. "
+                        "არ გაიმეორო ერთი და იგივე აზრი. "
+                        "უპასუხე გასაგებად და შინაარსიანად. "
+                        "არ მოიგონო ფაქტები. თუ რამე არ იცი, პირდაპირ თქვი."
+                    )
                 }
             ]
 
@@ -99,14 +87,16 @@ if st.button("მიპასუხე") and question.strip():
             messages.extend(st.session_state.chat_history)
 
             # მიმდინარე კითხვის დამატება
+            user_message = (
+                f"მომხმარებლის კითხვა: {question}\n\n"
+                f"ინტერნეტში მოძიებული ინფორმაცია:\n"
+                f"{search_context}\n\n"
+                "მიპასუხე გამართული ქართულით."
+            )
+
             messages.append({
                 "role": "user",
-                "content": (
-                    f"მომხმარებლის კითხვა: {question}\n\n"
-                    f"ინტერნეტში მოძიებული ინფორმაცია:\n"
-                    f"{search_context}\n\n"
-                    "მიპასუხე ქართულად, გასაგებად და არსებითად."
-                )
+                "content": user_message
             })
 
             try:
@@ -120,34 +110,36 @@ if st.button("მიპასუხე") and question.strip():
                         "model": "openrouter/free",
                         "messages": messages,
                         "temperature": 0.3,
-                        "max_tokens": 1200,
+                        "max_tokens": 1200
                     },
                     timeout=60
                 )
 
                 ai_response.raise_for_status()
+                data = ai_response.json()
 
-                                data = 
-                ai_response.json()
+                choices = data.get("choices", [])
 
-                answer = (
-                    data.get("choices", [{}])[0]
-                    .get("message", {})
-                    .get("content")
-                )
-
-                if not answer:
-                    st.error("AI-მ ცარიელი პასუხი დააბრუნა. სცადე ხელახლა.")
+                if not choices:
+                    st.error("AI-მ პასუხი ვერ დააბრუნა.")
                     st.code(str(data)[:1500])
                     st.stop()
 
+                answer = choices[0].get("message", {}).get("content")
+
+                if not isinstance(answer, str) or not answer.strip():
+                    st.error("AI-მ ცარიელი პასუხი დააბრუნა.")
+                    st.code(str(data)[:1500])
+                    st.stop()
+
+                # პასუხის ჩვენება
                 st.subheader("ნაცარქექიას პასუხი")
                 st.write(answer)
 
-                # საუბრის შენახვა მეხსიერებაში
+                # საუბრის მეხსიერებაში შენახვა
                 st.session_state.chat_history.append({
                     "role": "user",
-                    "content": messages[-1]["content"]
+                    "content": user_message
                 })
 
                 st.session_state.chat_history.append({
@@ -172,16 +164,17 @@ if st.button("მიპასუხე") and question.strip():
                             st.markdown(f"- [{title}]({link})")
 
             except requests.exceptions.Timeout:
-                st.error(
-                    "ნაცარქექიას პასუხის მიღებას დიდი დრო დასჭირდა. "
-                    "სცადე ხელახლა."
-                )
+                st.error("პასუხის მიღებას დიდი დრო დასჭირდა. სცადე ხელახლა.")
 
             except requests.exceptions.HTTPError as e:
                 st.error(f"AI სერვერის შეცდომა: {e}")
 
                 if e.response is not None:
-                    st.code(e.response.text[:1000])
+                    st.code(e.response.text[:1500])
+
+            except requests.exceptions.RequestException as e:
+                st.error(f"კავშირის შეცდომა: {e}")
 
             except Exception as e:
                 st.error(f"შეცდომა: {e}")
+
