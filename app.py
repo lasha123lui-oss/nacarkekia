@@ -127,7 +127,8 @@ if st.button("მიპასუხე") and question.strip():
 
                 ai_response.raise_for_status()
 
-                                data = ai_response.json()
+                                data = 
+                ai_response.json()
 
                 answer = (
                     data.get("choices", [{}])[0]
