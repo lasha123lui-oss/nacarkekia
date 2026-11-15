@@ -1,6 +1,8 @@
 
 import json
 import time
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import requests
 import streamlit as st
@@ -45,53 +47,192 @@ REVIEW_PROMPT = """
 
 MEMORY_PROMPT = """
 შენ მართავ მომხმარებლის პირად მეხსიერებას.
-
 შეამოწმე მხოლოდ მომხმარებლის ბოლო შეტყობინება და შეადარე
-ქვემოთ მოცემულ უკვე შენახულ ფაქტებს.
+უკვე შენახულ ფაქტებს.
 
 შესაძლო მოქმედებები:
 - add: ახალი მნიშვნელოვანი ფაქტის დამატება;
 - update: არსებული ფაქტის დაზუსტება ან შეცვლა;
 - none: დასამახსოვრებელი არაფერია.
 
-მნიშვნელოვანი წესები:
+წესები:
 1. გამოიყენე მხოლოდ მომხმარებლის მიერ პირდაპირ ნათქვამი ინფორმაცია.
-2. არ გამოიტანო ვარაუდები და არ მოიგონო ფაქტები.
+2. არ გამოიტანო ვარაუდები.
 3. თუ ფაქტი უკვე შენახულია იგივე მნიშვნელობით, აირჩიე none.
-4. თუ ახალი ფაქტი აშკარად ცვლის ან აზუსტებს არსებულს,
-   აირჩიე update და მიუთითე არსებული ჩანაწერის ID.
+4. თუ ახალი ფაქტი აშკარად ცვლის ძველს, აირჩიე update.
 5. თუ ფაქტი ახალია, აირჩიე add.
-6. ერთ შეტყობინებაზე დააბრუნე მაქსიმუმ 2 შეთავაზება.
-7. არ შეინახო პაროლები, API გასაღებები, საიდუმლო კოდები,
-   საბანკო/საიდენტიფიკაციო მონაცემები ან მგრძნობიარე პირადი ინფორმაცია.
-8. არ დაიმახსოვრო დროებითი კითხვები და სხვისი პირადი ინფორმაცია.
+6. მაქსიმუმ 2 შეთავაზება.
+7. არ შეინახო პაროლები, API გასაღებები, საბანკო ან მგრძნობიარე მონაცემები.
+8. არ დაიმახსოვრო დროებითი კითხვები.
 9. თუ ეჭვი გეპარება, აირჩიე none.
-10. განახლებისას შეინარჩუნე ძველი ფაქტის ის ნაწილები,
-    რომლებიც ახალ ინფორმაციას არ ეწინააღმდეგება.
+10. განახლებისას შეინარჩუნე ძველი ფაქტის შეუცვლელი ნაწილები.
 
-დააბრუნე მხოლოდ JSON ამ ფორმით:
+დააბრუნე მხოლოდ JSON:
 {
   "suggestions": [
-    {
-      "action": "add",
-      "id": null,
-      "memory": "მოკლე ფაქტი"
-    },
-    {
-      "action": "update",
-      "id": 12,
-      "memory": "განახლებული ფაქტი"
-    }
+    {"action": "add", "id": null, "memory": "მოკლე ფაქტი"},
+    {"action": "update", "id": 12, "memory": "განახლებული ფაქტი"}
   ]
 }
-
 თუ შეთავაზება არ არის საჭირო:
 {"suggestions": []}
 """.strip()
 
 
 # --------------------------------------------------
-# Supabase
+# თარიღი — თბილისის დროით
+# --------------------------------------------------
+
+def current_date_context():
+    now = datetime.now(ZoneInfo("Asia/Tbilisi"))
+
+    weekdays = [
+        "ორშაბათი", "სამშაბათი", "ოთხშაბათი",
+        "ხუთშაბათი", "პარასკევი", "შაბათი", "კვირა"
+    ]
+
+    months = [
+        "იანვარი", "თებერვალი", "მარტი", "აპრილი",
+        "მაისი", "ივნისი", "ივლისი", "აგვისტო",
+        "სექტემბერი", "ოქტომბერი", "ნოემბერი", "დეკემბერი"
+    ]
+
+    return (
+        f"დღევანდელი თარიღია: {now.day} {months[now.month - 1]} "
+        f"{now.year} წელი. კვირის დღე: {weekdays[now.weekday()]}. "
+        f"თბილისის დრო: {now.strftime('%H:%M')}."
+    )
+
+
+# --------------------------------------------------
+# ამინდი — Open-Meteo, API გასაღების გარეშე
+# --------------------------------------------------
+
+GEORGIAN_CITIES = {
+    "თბილისი": (41.7151, 44.8271),
+    "ბათუმი": (41.6168, 41.6367),
+    "ქუთაისი": (42.2679, 42.6946),
+    "რუსთავი": (41.5495, 44.9932),
+    "გორი": (41.9842, 44.1158),
+    "ზუგდიდი": (42.5088, 41.8709),
+    "თელავი": (41.9198, 45.4732),
+    "ფოთი": (42.1462, 41.6719),
+    "ახალციხე": (41.6390, 42.9826),
+    "ბორჯომი": (41.8417, 43.3792),
+    "მესტია": (43.0458, 42.7278),
+    "ოზურგეთი": (41.9244, 42.0068),
+    "სენაკი": (42.2697, 42.0676),
+    "ქობულეთი": (41.8236, 41.7753),
+}
+
+WEATHER_WORDS = [
+    "ამინდ", "ტემპერატურ", "წვიმ", "თოვლ",
+    "ქარ", "weather", "temperature", "forecast"
+]
+
+
+def get_weather_context(question):
+    lowered = question.lower()
+
+    if not any(word in lowered for word in WEATHER_WORDS):
+        return ""
+
+    city_name = "თბილისი"
+    coordinates = GEORGIAN_CITIES[city_name]
+
+    for city, coords in GEORGIAN_CITIES.items():
+        if city in question:
+            city_name = city
+            coordinates = coords
+            break
+
+    try:
+        response = requests.get(
+            "https://api.open-meteo.com/v1/forecast",
+            params={
+                "latitude": coordinates[0],
+                "longitude": coordinates[1],
+                "current": (
+                    "temperature_2m,relative_humidity_2m,"
+                    "apparent_temperature,precipitation,"
+                    "weather_code,wind_speed_10m"
+                ),
+                "daily": (
+                    "weather_code,temperature_2m_max,"
+                    "temperature_2m_min,precipitation_probability_max"
+                ),
+                "timezone": "Asia/Tbilisi",
+                "forecast_days": 1,
+            },
+            timeout=(4, 10),
+        )
+
+        response.raise_for_status()
+        data = response.json()
+
+        current = data.get("current", {})
+        daily = data.get("daily", {})
+
+        weather_codes = {
+            0: "მოწმენდილი ცა",
+            1: "უმეტესად მზიანი",
+            2: "ნაწილობრივ ღრუბლიანი",
+            3: "მოღრუბლული",
+            45: "ნისლი",
+            48: "ნისლი",
+            51: "მსუბუქი ჟინჟღლი",
+            53: "ჟინჟღლი",
+            55: "ძლიერი ჟინჟღლი",
+            61: "მსუბუქი წვიმა",
+            63: "წვიმა",
+            65: "ძლიერი წვიმა",
+            71: "მსუბუქი თოვლი",
+            73: "თოვლი",
+            75: "ძლიერი თოვლი",
+            80: "წვიმის შხაპუნა",
+            81: "წვიმა",
+            82: "ძლიერი წვიმა",
+            95: "ჭექა-ქუხილი",
+            96: "სეტყვიანი ჭექა-ქუხილი",
+            99: "ძლიერი სეტყვა და ჭექა-ქუხილი",
+        }
+
+        code = current.get("weather_code")
+        description = weather_codes.get(
+            code, "მდგომარეობა უცნობია"
+        )
+
+        minimum = (daily.get("temperature_2m_min") or [None])[0]
+        maximum = (daily.get("temperature_2m_max") or [None])[0]
+        rain = (
+            daily.get("precipitation_probability_max") or [None]
+        )[0]
+
+        return (
+            f"ამინდის ცოცხალი მონაცემები ქალაქისთვის: {city_name}. "
+            f"ახლანდელი ტემპერატურა: "
+            f"{current.get('temperature_2m')}°C. "
+            f"შეგრძნებით: {current.get('apparent_temperature')}°C. "
+            f"მდგომარეობა: {description}. "
+            f"ტენიანობა: {current.get('relative_humidity_2m')}%. "
+            f"ქარი: {current.get('wind_speed_10m')} კმ/სთ. "
+            f"დღის მინიმალური ტემპერატურა: {minimum}°C. "
+            f"დღის მაქსიმალური ტემპერატურა: {maximum}°C. "
+            f"ნალექის ალბათობა: {rain}%. "
+            "წყარო: Open-Meteo. მონაცემები შეიძლება შეიცვალოს."
+        )
+
+    except (
+        requests.exceptions.RequestException,
+        ValueError,
+        KeyError,
+        TypeError,
+    ):
+        return "ამინდის სერვისთან კავშირი ამჟამად ვერ მოხერხდა."
+
+
+# --------------------------------------------------
+# Supabase — მეხსიერება
 # --------------------------------------------------
 
 def memory_config():
@@ -123,34 +264,22 @@ def memory_request(method, params=None, payload=None):
     if method == "POST":
         headers["Prefer"] = "return=minimal"
         response = requests.post(
-            endpoint,
-            headers=headers,
-            params=query,
-            json=payload,
-            timeout=15,
+            endpoint, headers=headers, params=query,
+            json=payload, timeout=15
         )
     elif method == "GET":
         response = requests.get(
-            endpoint,
-            headers=headers,
-            params=query,
-            timeout=15,
+            endpoint, headers=headers, params=query, timeout=15
         )
     elif method == "PATCH":
         headers["Prefer"] = "return=minimal"
         response = requests.patch(
-            endpoint,
-            headers=headers,
-            params=query,
-            json=payload,
-            timeout=15,
+            endpoint, headers=headers, params=query,
+            json=payload, timeout=15
         )
     elif method == "DELETE":
         response = requests.delete(
-            endpoint,
-            headers=headers,
-            params=query,
-            timeout=15,
+            endpoint, headers=headers, params=query, timeout=15
         )
     else:
         raise ValueError("უცნობი მოქმედება.")
@@ -180,13 +309,9 @@ def get_memories():
 
 def save_memory(value):
     _, _, owner = memory_config()
-
     return memory_request(
         "POST",
-        payload={
-            "owner_id": owner,
-            "memory": value,
-        },
+        payload={"owner_id": owner, "memory": value},
     )
 
 
@@ -206,7 +331,7 @@ def delete_memory(memory_id):
 
 
 # --------------------------------------------------
-# AI მოდელებთან კავშირი
+# AI მოდელები
 # --------------------------------------------------
 
 def call_model(api_key, model_name, messages, max_tokens=1400):
@@ -290,20 +415,14 @@ def ask_models(api_key, messages):
 
 
 # --------------------------------------------------
-# მეხსიერების შეთავაზებების ამოცნობა
+# მეხსიერების შეთავაზებები
 # --------------------------------------------------
 
 def suggest_memory_actions(
-    api_key,
-    model_name,
-    user_text,
-    existing_memories,
+    api_key, model_name, user_text, existing_memories
 ):
     memory_list = [
-        {
-            "id": item["id"],
-            "memory": item["memory"],
-        }
+        {"id": item["id"], "memory": item["memory"]}
         for item in existing_memories
     ]
 
@@ -313,17 +432,14 @@ def suggest_memory_actions(
             "role": "user",
             "content": (
                 f"მომხმარებლის ბოლო შეტყობინება:\n{user_text}\n\n"
-                f"უკვე შენახული ფაქტები:\n"
+                f"შენახული ფაქტები:\n"
                 f"{json.dumps(memory_list, ensure_ascii=False)}"
             ),
         },
     ]
 
     result, _, _ = call_model(
-        api_key,
-        model_name,
-        messages,
-        max_tokens=500,
+        api_key, model_name, messages, max_tokens=500
     )
 
     start = result.find("{")
@@ -372,7 +488,6 @@ def suggest_memory_actions(
         if not memory or len(memory) > 250:
             continue
 
-        # ზუსტი დუბლიკატის დაბლოკვა
         if memory.casefold() in existing_texts:
             continue
 
@@ -386,7 +501,6 @@ def suggest_memory_actions(
         elif action == "update":
             memory_id = item.get("id")
 
-            # მოდელს მხოლოდ არსებული ჩანაწერის შეცვლა შეუძლია
             if memory_id not in existing_by_id:
                 continue
 
@@ -406,7 +520,7 @@ def suggest_memory_actions(
 
 
 # --------------------------------------------------
-# Streamlit სესიის მონაცემები
+# Streamlit სესია
 # --------------------------------------------------
 
 if "chat_history" not in st.session_state:
@@ -420,13 +534,11 @@ if "memory_notice" not in st.session_state:
 
 
 # --------------------------------------------------
-# გვერდითი პანელი: მეხსიერების მართვა
+# გვერდითი პანელი
 # --------------------------------------------------
 
 st.sidebar.header("🧠 ნაცარქექიას მეხსიერება")
-st.sidebar.caption(
-    "შენ აკონტროლებ შენახულ ინფორმაციას."
-)
+st.sidebar.caption("შენ აკონტროლებ შენახულ ინფორმაციას.")
 
 manual_memory = st.sidebar.text_area(
     "ახალი ინფორმაციის დამატება",
@@ -449,18 +561,15 @@ if st.sidebar.button("დამატება", key="manual_add"):
                 save_memory(manual_memory.strip())
                 st.sidebar.success("ინფორმაცია შენახულია.")
                 st.rerun()
-
         except Exception as error:
             st.sidebar.error(str(error))
     else:
         st.sidebar.warning("ჯერ ჩაწერე ინფორმაცია.")
 
 
-# მეხსიერების წამოღება
 try:
     memories = get_memories()
     memory_ready = True
-
 except Exception as error:
     memories = []
     memory_ready = False
@@ -468,7 +577,6 @@ except Exception as error:
     st.sidebar.caption(str(error)[:250])
 
 
-# შენახული ჩანაწერების ნახვა, შესწორება და წაშლა
 st.sidebar.subheader("შენახული ჩანაწერები")
 
 if memory_ready and memories:
@@ -487,10 +595,7 @@ if memory_ready and memories:
             ):
                 if edited_value.strip():
                     try:
-                        update_memory(
-                            item["id"],
-                            edited_value.strip(),
-                        )
+                        update_memory(item["id"], edited_value.strip())
                         st.sidebar.success("ჩანაწერი განახლდა.")
                         st.rerun()
                     except Exception as error:
@@ -516,7 +621,7 @@ elif memory_ready:
 
 
 # --------------------------------------------------
-# მომხმარებლის თანხმობის მოლოდინში არსებული შეთავაზებები
+# მეხსიერების შეთავაზებების დადასტურება
 # --------------------------------------------------
 
 if st.session_state.memory_notice:
@@ -555,8 +660,7 @@ if st.session_state.pending_memories:
                         notice = "ახალი ინფორმაცია დავიმახსოვრე."
                     else:
                         update_memory(
-                            candidate["id"],
-                            candidate["memory"],
+                            candidate["id"], candidate["memory"]
                         )
                         notice = "ძველი ჩანაწერი განვაახლე."
 
@@ -627,9 +731,7 @@ if st.button("მიპასუხე") and question.strip():
                 )
                 search_response.raise_for_status()
                 search_data = search_response.json()
-                results = search_data.get(
-                    "organic_results", []
-                )
+                results = search_data.get("organic_results", [])
 
                 for item in results[:5]:
                     search_context += (
@@ -646,7 +748,11 @@ if st.button("მიპასუხე") and question.strip():
         elif use_search and not search_key:
             st.warning("SerpApi-ის გასაღები ვერ მოიძებნა.")
 
-        # მეხსიერების კონტექსტი
+        # მიმდინარე თარიღი და ამინდი
+        date_context = current_date_context()
+        weather_context = get_weather_context(question)
+
+        # მეხსიერება
         memory_context = "\n".join(
             f"- {item['memory']}"
             for item in memories
@@ -666,14 +772,17 @@ if st.button("მიპასუხე") and question.strip():
                 ),
             })
 
-        messages.extend(
-            st.session_state.chat_history[-8:]
-        )
+        messages.extend(st.session_state.chat_history[-8:])
 
         user_message = (
+            f"{date_context}\n\n"
             f"მომხმარებლის კითხვა:\n{question}\n\n"
-            f"ინტერნეტში მოძიებული ინფორმაცია:\n"
-            f"{search_context}\n\n"
+            f"ამინდის ცოცხალი მონაცემები:\n{weather_context}\n\n"
+            f"ინტერნეტში მოძიებული ინფორმაცია:\n{search_context}\n\n"
+            "თუ კითხვა თარიღს ეხება, დაეყრდენი მოცემულ მიმდინარე თარიღს. "
+            "ამინდზე პასუხისას გამოიყენე ამინდის წყაროს მონაცემები, "
+            "თუ ისინი ხელმისაწვდომია. თუ მონაცემები ვერ მოიძებნა, "
+            "ამის შესახებ გულწრფელად თქვი. "
             "მიპასუხე გამართული, ბუნებრივი ქართულით."
         )
 
@@ -683,16 +792,13 @@ if st.button("მიპასუხე") and question.strip():
         })
 
         answer, used_model, finish_reason, errors = ask_models(
-            ai_key,
-            messages,
+            ai_key, messages
         )
 
         if not answer:
             st.error("უფასო მოდელები ამჟამად მიუწვდომელია.")
-
             for error in errors:
                 st.code(error)
-
             st.stop()
 
         # ქართული ტექსტის შემოწმება
@@ -719,7 +825,6 @@ if st.button("მიპასუხე") and question.strip():
                         ],
                         max_tokens=1500,
                     )
-
                     answer = reviewed
                     quality_checked = True
 
@@ -758,10 +863,7 @@ if st.button("მიპასუხე") and question.strip():
         if memory_ready:
             try:
                 suggestions = suggest_memory_actions(
-                    ai_key,
-                    used_model,
-                    question,
-                    memories,
+                    ai_key, used_model, question, memories
                 )
 
                 if suggestions:
