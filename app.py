@@ -6,14 +6,16 @@ import requests
 import streamlit as st
 
 
+# --------------------------------------------------
+# ძირითადი პარამეტრები
+# --------------------------------------------------
+
 st.set_page_config(page_title="ნაცარქექია", page_icon="🧠")
 st.title("🧠 ნაცარქექია")
 st.write("შენი პირადი ქართული AI ასისტენტი.")
 
 API_URL = "https://openrouter.ai/api/v1/chat/completions"
 
-# ვინარჩუნებთ წინა მოდელების სიას.
-# უფასო მოდელების ხელმისაწვდომობა შეიძლება შეიცვალოს.
 MODEL_ORDER = [
     "inclusionai/ling-3.2-flash:free",
     "baidu/ernie-5.5-flash-preview:free",
@@ -38,40 +40,59 @@ REVIEW_PROMPT = """
 გაასწორე გრამატიკა, სიტყვათა შეთანხმება და არაბუნებრივი გამოთქმები.
 შეინარჩუნე საწყისი აზრი და ფაქტები.
 არ დაამატო ახალი ინფორმაცია.
-თუ პასუხი შეწყვეტილია, დაასრულე მხოლოდ მაშინ, თუ აზრი ნათელია.
 დააბრუნე მხოლოდ საბოლოო გამართული პასუხი.
 """.strip()
 
 MEMORY_PROMPT = """
-შენ ხარ პირადი ასისტენტის მეხსიერების დამგეგმავი.
+შენ მართავ მომხმარებლის პირად მეხსიერებას.
 
-შეამოწმე მომხმარებლის ბოლო შეტყობინება და ამოარჩიე მაქსიმუმ
-3 მნიშვნელოვანი ფაქტი, რომლის დამახსოვრებაც მომავალ საუბრებში
-შეიძლება სასარგებლო იყოს.
+შეამოწმე მხოლოდ მომხმარებლის ბოლო შეტყობინება და შეადარე
+ქვემოთ მოცემულ უკვე შენახულ ფაქტებს.
 
-დაიმახსოვრე მხოლოდ მომხმარებლის მიერ პირდაპირ ნათქვამი ფაქტები:
-- ხანგრძლივი ინტერესები და ჰობი;
-- მიმდინარე პროექტები და მიზნები;
-- სტაბილური უპირატესობები;
-- მომხმარებლის მიერ ნათქვამი პრაქტიკული გარემოებები.
+შესაძლო მოქმედებები:
+- add: ახალი მნიშვნელოვანი ფაქტის დამატება;
+- update: არსებული ფაქტის დაზუსტება ან შეცვლა;
+- none: დასამახსოვრებელი არაფერია.
 
-არ შეინახო:
-- პაროლები, API გასაღებები, საიდუმლო კოდები;
-- საბანკო ან საიდენტიფიკაციო მონაცემები;
-- ჯანმრთელობის, რელიგიის, პოლიტიკური შეხედულებების,
-  სექსუალური ცხოვრების ან სხვა მგრძნობიარე პირადი ინფორმაცია;
-- დროებითი კითხვები, ვარაუდები ან სხვის შესახებ ინფორმაცია;
-- ფაქტი, რომელიც მომხმარებელს პირდაპირ არ უთქვამს.
+მნიშვნელოვანი წესები:
+1. გამოიყენე მხოლოდ მომხმარებლის მიერ პირდაპირ ნათქვამი ინფორმაცია.
+2. არ გამოიტანო ვარაუდები და არ მოიგონო ფაქტები.
+3. თუ ფაქტი უკვე შენახულია იგივე მნიშვნელობით, აირჩიე none.
+4. თუ ახალი ფაქტი აშკარად ცვლის ან აზუსტებს არსებულს,
+   აირჩიე update და მიუთითე არსებული ჩანაწერის ID.
+5. თუ ფაქტი ახალია, აირჩიე add.
+6. ერთ შეტყობინებაზე დააბრუნე მაქსიმუმ 2 შეთავაზება.
+7. არ შეინახო პაროლები, API გასაღებები, საიდუმლო კოდები,
+   საბანკო/საიდენტიფიკაციო მონაცემები ან მგრძნობიარე პირადი ინფორმაცია.
+8. არ დაიმახსოვრო დროებითი კითხვები და სხვისი პირადი ინფორმაცია.
+9. თუ ეჭვი გეპარება, აირჩიე none.
+10. განახლებისას შეინარჩუნე ძველი ფაქტის ის ნაწილები,
+    რომლებიც ახალ ინფორმაციას არ ეწინააღმდეგება.
 
-არ გამოიტანო დასკვნა და არ მოიგონო ინფორმაცია.
-თუ დასამახსოვრებელი არაფერია, დააბრუნე ცარიელი სია.
+დააბრუნე მხოლოდ JSON ამ ფორმით:
+{
+  "suggestions": [
+    {
+      "action": "add",
+      "id": null,
+      "memory": "მოკლე ფაქტი"
+    },
+    {
+      "action": "update",
+      "id": 12,
+      "memory": "განახლებული ფაქტი"
+    }
+  ]
+}
 
-პასუხი დააბრუნე მხოლოდ JSON ფორმატში:
-{"memories": ["პირველი ფაქტი", "მეორე ფაქტი"]}
-
-ჩანაწერები უნდა იყოს მოკლე, გასაგები და ქართულად.
+თუ შეთავაზება არ არის საჭირო:
+{"suggestions": []}
 """.strip()
 
+
+# --------------------------------------------------
+# Supabase
+# --------------------------------------------------
 
 def memory_config():
     url = st.secrets.get("SUPABASE_URL", "").strip().rstrip("/")
@@ -88,7 +109,6 @@ def memory_request(method, params=None, payload=None):
             "Supabase-ის Secrets სრულად შევსებული არ არის."
         )
 
-    # ახალი sb_secret გასაღები იგზავნება მხოლოდ apikey სათაურში.
     headers = {
         "apikey": key,
         "Content-Type": "application/json",
@@ -116,6 +136,15 @@ def memory_request(method, params=None, payload=None):
             params=query,
             timeout=15,
         )
+    elif method == "PATCH":
+        headers["Prefer"] = "return=minimal"
+        response = requests.patch(
+            endpoint,
+            headers=headers,
+            params=query,
+            json=payload,
+            timeout=15,
+        )
     elif method == "DELETE":
         response = requests.delete(
             endpoint,
@@ -124,12 +153,12 @@ def memory_request(method, params=None, payload=None):
             timeout=15,
         )
     else:
-        raise ValueError("მეხსიერების მოქმედება უცნობია.")
+        raise ValueError("უცნობი მოქმედება.")
 
     if not response.ok:
         raise RuntimeError(
-            f"მეხსიერების ბაზის შეცდომა: "
-            f"HTTP {response.status_code} {response.text[:250]}"
+            f"Supabase შეცდომა: HTTP {response.status_code} "
+            f"{response.text[:250]}"
         )
 
     if method == "GET":
@@ -161,12 +190,24 @@ def save_memory(value):
     )
 
 
+def update_memory(memory_id, value):
+    return memory_request(
+        "PATCH",
+        params={"id": f"eq.{memory_id}"},
+        payload={"memory": value},
+    )
+
+
 def delete_memory(memory_id):
     return memory_request(
         "DELETE",
         params={"id": f"eq.{memory_id}"},
     )
 
+
+# --------------------------------------------------
+# AI მოდელებთან კავშირი
+# --------------------------------------------------
 
 def call_model(api_key, model_name, messages, max_tokens=1400):
     response = requests.post(
@@ -248,17 +289,32 @@ def ask_models(api_key, messages):
     return None, None, None, errors
 
 
-def suggest_memories(api_key, model_name, user_text, existing_memories):
-    """ამოიცნობს შესაძლო ფაქტებს, მაგრამ არაფერს ინახავს."""
+# --------------------------------------------------
+# მეხსიერების შეთავაზებების ამოცნობა
+# --------------------------------------------------
+
+def suggest_memory_actions(
+    api_key,
+    model_name,
+    user_text,
+    existing_memories,
+):
+    memory_list = [
+        {
+            "id": item["id"],
+            "memory": item["memory"],
+        }
+        for item in existing_memories
+    ]
 
     messages = [
         {"role": "system", "content": MEMORY_PROMPT},
         {
             "role": "user",
             "content": (
-                f"მომხმარებლის შეტყობინება:\n{user_text}\n\n"
-                f"უკვე შენახული ფაქტები:\n{existing_memories}\n\n"
-                "არ გაიმეორო უკვე შენახული ფაქტები."
+                f"მომხმარებლის ბოლო შეტყობინება:\n{user_text}\n\n"
+                f"უკვე შენახული ფაქტები:\n"
+                f"{json.dumps(memory_list, ensure_ascii=False)}"
             ),
         },
     ]
@@ -267,15 +323,13 @@ def suggest_memories(api_key, model_name, user_text, existing_memories):
         api_key,
         model_name,
         messages,
-        max_tokens=350,
+        max_tokens=500,
     )
 
-    # ვცდილობთ JSON-ის ამოღებას იმ შემთხვევაშიც,
-    # თუ მოდელმა ზედმეტი ტექსტი დაუმატა.
     start = result.find("{")
     end = result.rfind("}")
 
-    if start == -1 or end <= start:
+    if start < 0 or end <= start:
         return []
 
     try:
@@ -283,32 +337,78 @@ def suggest_memories(api_key, model_name, user_text, existing_memories):
     except json.JSONDecodeError:
         return []
 
-    candidates = data.get("memories", [])
+    suggestions = data.get("suggestions", [])
 
-    if not isinstance(candidates, list):
+    if not isinstance(suggestions, list):
         return []
+
+    existing_by_id = {
+        item["id"]: item["memory"]
+        for item in existing_memories
+    }
+
+    existing_texts = [
+        item["memory"].strip().casefold()
+        for item in existing_memories
+    ]
 
     clean = []
 
-    for item in candidates[:3]:
-        if not isinstance(item, str):
+    for item in suggestions[:2]:
+        if not isinstance(item, dict):
             continue
 
-        item = item.strip()
+        action = item.get("action")
+        memory = item.get("memory")
 
-        if not item or len(item) > 250:
+        if action not in ("add", "update"):
             continue
 
-        if any(item.casefold() == old.casefold()
-               for old in existing_memories):
+        if not isinstance(memory, str):
             continue
 
-        clean.append(item)
+        memory = memory.strip()
+
+        if not memory or len(memory) > 250:
+            continue
+
+        # ზუსტი დუბლიკატის დაბლოკვა
+        if memory.casefold() in existing_texts:
+            continue
+
+        if action == "add":
+            clean.append({
+                "action": "add",
+                "id": None,
+                "memory": memory,
+            })
+
+        elif action == "update":
+            memory_id = item.get("id")
+
+            # მოდელს მხოლოდ არსებული ჩანაწერის შეცვლა შეუძლია
+            if memory_id not in existing_by_id:
+                continue
+
+            if memory.casefold() == (
+                existing_by_id[memory_id].strip().casefold()
+            ):
+                continue
+
+            clean.append({
+                "action": "update",
+                "id": memory_id,
+                "memory": memory,
+                "old_memory": existing_by_id[memory_id],
+            })
 
     return clean
 
 
-# სესიის ცვლადები
+# --------------------------------------------------
+# Streamlit სესიის მონაცემები
+# --------------------------------------------------
+
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
@@ -319,45 +419,91 @@ if "memory_notice" not in st.session_state:
     st.session_state.memory_notice = ""
 
 
-# მეხსიერების გვერდითი პანელი
+# --------------------------------------------------
+# გვერდითი პანელი: მეხსიერების მართვა
+# --------------------------------------------------
+
 st.sidebar.header("🧠 ნაცარქექიას მეხსიერება")
 st.sidebar.caption(
-    "აქ შეგიძლია თავად დაამატო ინფორმაცია, "
-    "რომელიც ნაცარქექიამ უნდა დაიმახსოვროს."
+    "შენ აკონტროლებ შენახულ ინფორმაციას."
 )
 
-memory_text = st.sidebar.text_area(
-    "რა დაიმახსოვროს?",
+manual_memory = st.sidebar.text_area(
+    "ახალი ინფორმაციის დამატება",
     placeholder="მაგალითად: ჩემი საყვარელი თამაშია PUBG.",
 )
 
-if st.sidebar.button("მეხსიერებაში შენახვა"):
-    if memory_text.strip():
+if st.sidebar.button("დამატება", key="manual_add"):
+    if manual_memory.strip():
         try:
-            save_memory(memory_text.strip())
-            st.sidebar.success("ინფორმაცია შენახულია.")
-            st.rerun()
+            current = get_memories()
+            duplicate = any(
+                item["memory"].strip().casefold()
+                == manual_memory.strip().casefold()
+                for item in current
+            )
+
+            if duplicate:
+                st.sidebar.info("ეს ინფორმაცია უკვე შენახულია.")
+            else:
+                save_memory(manual_memory.strip())
+                st.sidebar.success("ინფორმაცია შენახულია.")
+                st.rerun()
+
         except Exception as error:
             st.sidebar.error(str(error))
     else:
         st.sidebar.warning("ჯერ ჩაწერე ინფორმაცია.")
 
 
-# ბაზიდან მეხსიერების წამოღება
+# მეხსიერების წამოღება
 try:
     memories = get_memories()
     memory_ready = True
-    st.sidebar.caption(
-        f"შენახულია {len(memories)} ჩანაწერი"
-    )
 
+except Exception as error:
+    memories = []
+    memory_ready = False
+    st.sidebar.error("მეხსიერების ბაზასთან კავშირი ვერ შედგა.")
+    st.sidebar.caption(str(error)[:250])
+
+
+# შენახული ჩანაწერების ნახვა, შესწორება და წაშლა
+st.sidebar.subheader("შენახული ჩანაწერები")
+
+if memory_ready and memories:
     for item in memories:
         with st.sidebar.expander(item["memory"][:55]):
-            st.write(item["memory"])
+            edited_value = st.text_area(
+                "ჩანაწერი",
+                value=item["memory"],
+                key=f"edit_text_{item['id']}",
+            )
+
+            if st.button(
+                "ცვლილების შენახვა",
+                key=f"edit_save_{item['id']}",
+                use_container_width=True,
+            ):
+                if edited_value.strip():
+                    try:
+                        update_memory(
+                            item["id"],
+                            edited_value.strip(),
+                        )
+                        st.sidebar.success("ჩანაწერი განახლდა.")
+                        st.rerun()
+                    except Exception as error:
+                        st.sidebar.error(str(error))
+                else:
+                    st.sidebar.warning(
+                        "ცარიელი ჩანაწერის შენახვა არ შეიძლება."
+                    )
 
             if st.button(
                 "წაშლა",
-                key=f"delete_memory_{item['id']}",
+                key=f"delete_{item['id']}",
+                use_container_width=True,
             ):
                 try:
                     delete_memory(item["id"])
@@ -365,70 +511,87 @@ try:
                 except Exception as error:
                     st.sidebar.error(str(error))
 
-except Exception as error:
-    memories = []
-    memory_ready = False
-    st.sidebar.warning(
-        "მეხსიერების ბაზასთან კავშირი ვერ შედგა."
-    )
-    st.sidebar.caption(str(error)[:250])
+elif memory_ready:
+    st.sidebar.caption("მეხსიერება ჯერ ცარიელია.")
 
 
-# მომხმარებლის თანხმობის მოლოდინში არსებული ფაქტები
+# --------------------------------------------------
+# მომხმარებლის თანხმობის მოლოდინში არსებული შეთავაზებები
+# --------------------------------------------------
+
 if st.session_state.memory_notice:
     st.success(st.session_state.memory_notice)
     st.session_state.memory_notice = ""
 
 if st.session_state.pending_memories:
-    st.subheader("🧠 ნაცარქექიას შემოთავაზება")
+    st.subheader("🧠 მეხსიერების შემოთავაზებები")
     st.write(
-        "ეს ინფორმაცია შეიძლება მომავალში გამოგვადგეს. "
-        "შენ გადაწყვიტე, დავიმახსოვრო თუ არა."
+        "ნაცარქექიამ ეს ინფორმაცია ამოიცნო. "
+        "შენ გადაწყვიტე, შევინახოთ თუ განვაახლოთ."
     )
 
     for index, candidate in enumerate(
         st.session_state.pending_memories
     ):
-        st.write(f"• {candidate}")
+        if candidate["action"] == "update":
+            st.markdown("**არსებული ჩანაწერის განახლება**")
+            st.caption(f"ძველი: {candidate['old_memory']}")
+            st.write(f"ახალი: {candidate['memory']}")
+        else:
+            st.markdown("**ახალი ჩანაწერის დამატება**")
+            st.write(candidate["memory"])
 
         col1, col2 = st.columns(2)
 
         with col1:
             if st.button(
-                "დამახსოვრება",
-                key=f"approve_memory_{index}",
+                "დადასტურება",
+                key=f"approve_{index}",
                 use_container_width=True,
             ):
                 try:
-                    save_memory(candidate)
+                    if candidate["action"] == "add":
+                        save_memory(candidate["memory"])
+                        notice = "ახალი ინფორმაცია დავიმახსოვრე."
+                    else:
+                        update_memory(
+                            candidate["id"],
+                            candidate["memory"],
+                        )
+                        notice = "ძველი ჩანაწერი განვაახლე."
+
                     st.session_state.pending_memories.pop(index)
-                    st.session_state.memory_notice = (
-                        "ინფორმაცია წარმატებით დავიმახსოვრე."
-                    )
+                    st.session_state.memory_notice = notice
                     st.rerun()
+
                 except Exception as error:
                     st.error(str(error))
 
         with col2:
             if st.button(
-                "არ შეინახო",
-                key=f"reject_memory_{index}",
+                "უარი",
+                key=f"reject_{index}",
                 use_container_width=True,
             ):
                 st.session_state.pending_memories.pop(index)
                 st.rerun()
 
-    if st.button("ყველა შემოთავაზებაზე უარი"):
+    if st.button("ყველა შეთავაზებაზე უარი"):
         st.session_state.pending_memories = []
         st.rerun()
 
 
-# ჩატის პარამეტრები
+# --------------------------------------------------
+# ჩატი
+# --------------------------------------------------
+
 question = st.text_input("მკითხე რამე:")
+
 use_search = st.checkbox(
     "ინტერნეტშიც მოძებნე პასუხი",
     value=False,
 )
+
 check_quality = st.checkbox(
     "პასუხი ქართულად გადაამოწმე",
     value=True,
@@ -440,9 +603,7 @@ if st.button("მიპასუხე") and question.strip():
     search_key = st.secrets.get("SERPAPI_API_KEY", "")
 
     if not ai_key:
-        st.error(
-            "OpenRouter-ის გასაღები ვერ მოიძებნა."
-        )
+        st.error("OpenRouter-ის გასაღები ვერ მოიძებნა.")
         st.stop()
 
     with st.spinner("ნაცარქექია ფიქრობს..."):
@@ -483,11 +644,9 @@ if st.button("მიპასუხე") and question.strip():
                 st.warning("ინტერნეტძიება ვერ შესრულდა.")
 
         elif use_search and not search_key:
-            st.warning(
-                "SerpApi-ის გასაღები ვერ მოიძებნა."
-            )
+            st.warning("SerpApi-ის გასაღები ვერ მოიძებნა.")
 
-        # შენახული მეხსიერების კონტექსტი
+        # მეხსიერების კონტექსტი
         memory_context = "\n".join(
             f"- {item['memory']}"
             for item in memories
@@ -501,9 +660,8 @@ if st.button("მიპასუხე") and question.strip():
             messages.append({
                 "role": "system",
                 "content": (
-                    "ქვემოთ მოცემულია მომხმარებლის მიერ "
-                    "თანხმობით შენახული მეხსიერება. გამოიყენე "
-                    "მხოლოდ მაშინ, როცა კითხვას ეხება:\n"
+                    "ეს არის მომხმარებლის მიერ შენახული ინფორმაცია. "
+                    "გამოიყენე მხოლოდ მაშინ, როცა კითხვას ეხება:\n"
                     + memory_context
                 ),
             })
@@ -530,9 +688,7 @@ if st.button("მიპასუხე") and question.strip():
         )
 
         if not answer:
-            st.error(
-                "უფასო მოდელები ამჟამად მიუწვდომელია."
-            )
+            st.error("უფასო მოდელები ამჟამად მიუწვდომელია.")
 
             for error in errors:
                 st.code(error)
@@ -578,14 +734,10 @@ if st.button("მიპასუხე") and question.strip():
         st.write(answer)
 
         if finish_reason == "length":
-            st.warning(
-                "პასუხი შესაძლოა ბოლომდე არ დასრულებულა."
-            )
+            st.warning("პასუხი შესაძლოა ბოლომდე არ დასრულებულა.")
 
         if quality_checked:
-            st.caption(
-                "ქართული ტექსტი დამატებით შემოწმებულია."
-            )
+            st.caption("ქართული ტექსტი დამატებით შემოწმებულია.")
 
         # საუბრის ისტორია
         st.session_state.chat_history.append({
@@ -602,25 +754,18 @@ if st.button("მიპასუხე") and question.strip():
             st.session_state.chat_history[-8:]
         )
 
-        # ავტომატური მეხსიერების შეთავაზება.
-        # აქ ხდება მხოლოდ ამოცნობა — შენახვა არა.
+        # მეხსიერების მოქმედებების შეთავაზება
         if memory_ready:
             try:
-                existing_texts = [
-                    item["memory"] for item in memories
-                ]
-
-                candidates = suggest_memories(
+                suggestions = suggest_memory_actions(
                     ai_key,
                     used_model,
                     question,
-                    existing_texts,
+                    memories,
                 )
 
-                if candidates:
-                    st.session_state.pending_memories = (
-                        candidates
-                    )
+                if suggestions:
+                    st.session_state.pending_memories = suggestions
 
             except (
                 requests.exceptions.RequestException,
@@ -645,10 +790,7 @@ if st.button("მიპასუხე") and question.strip():
                 link = item.get("link", "")
 
                 if link:
-                    st.markdown(
-                        f"- [{title}]({link})"
-                    )
+                    st.markdown(f"- [{title}]({link})")
 
-    # შემოთავაზებების გამოსაჩენად განახლება
     if st.session_state.pending_memories:
         st.rerun()
