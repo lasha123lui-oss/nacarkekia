@@ -13,11 +13,8 @@ st.set_page_config(
 st.title("🧠 ნაცარქექია")
 st.write("შენი პირადი ქართული AI ასისტენტი.")
 
-
-# საუბრის მეხსიერება
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
-
 
 question = st.text_input("მკითხე რამე:")
 
@@ -26,15 +23,14 @@ use_search = st.checkbox(
     value=False
 )
 
-
-# მოდელების რიგი
+# მოდელები სხვადასხვა პროვაიდერებიდან
 MODEL_ORDER = [
-    "google/gemma-4-31b-it:free",
-    "google/gemma-4-26b-a4b-it:free",
+    "nvidia/nemotron-3.5-super-vl:free",
+    "dots-studio/dots-3-note-preview:free",
+    "cohere/north-mini-code:free",
+    "nvidia/nemotron-3-ultra-550b-a55b:free",
 ]
 
-
-# ქართული ენის ინსტრუქცია
 SYSTEM_PROMPT = (
     "შენ ხარ ნაცარქექია — მეგობრული ქართული AI ასისტენტი. "
     "ყოველთვის უპასუხე გამართული, ბუნებრივი და თანამედროვე ქართულით. "
@@ -46,16 +42,16 @@ SYSTEM_PROMPT = (
     "არ გაიმეორო ერთი და იგივე აზრი. "
     "არ მოიგონო ფაქტები ან წყაროები. "
     "თუ რამე არ იცი, პირდაპირ თქვი. "
+    "მოძიებული ინფორმაციის გამოყენებისას განასხვავე ფაქტი და ვარაუდი. "
     "პასუხის გაგზავნამდე ჩუმად გადაამოწმე ქართული გრამატიკა და ბუნებრიობა. "
     "აჩვენე მხოლოდ საბოლოო პასუხი ქართულად."
 )
 
 
-def ask_model(api_key, messages):
+def ask_models(api_key, messages):
     errors = []
 
     for model_name in MODEL_ORDER:
-
         try:
             response = requests.post(
                 "https://openrouter.ai/api/v1/chat/completions",
@@ -73,13 +69,22 @@ def ask_model(api_key, messages):
                     "temperature": 0.3,
                     "max_tokens": 1200,
                 },
-                timeout=(8, 60),
+                timeout=(8, 25),
             )
 
             if not response.ok:
+                try:
+                    error_data = response.json()
+                    error_message = error_data.get("error", {}).get(
+                        "message",
+                        response.text
+                    )
+                except ValueError:
+                    error_message = response.text
+
                 errors.append(
-                    f"{model_name}: HTTP {response.status_code} — "
-                    f"{response.text[:500]}"
+                    f"{model_name} — HTTP {response.status_code}: "
+                    f"{str(error_message)[:350]}"
                 )
                 continue
 
@@ -88,13 +93,14 @@ def ask_model(api_key, messages):
 
             if not choices:
                 errors.append(
-                    f"{model_name}: პასუხი არ დაბრუნებულა."
+                    f"{model_name} — სერვერმა ცარიელი choices დააბრუნა."
                 )
                 continue
 
             choice = choices[0]
             message = choice.get("message") or {}
             answer = message.get("content")
+            finish_reason = choice.get("finish_reason")
 
             if isinstance(answer, list):
                 answer = "\n".join(
@@ -107,28 +113,28 @@ def ask_model(api_key, messages):
                 return (
                     answer.strip(),
                     data.get("model", model_name),
-                    choice.get("finish_reason"),
+                    finish_reason,
                     errors,
                 )
 
             errors.append(
-                f"{model_name}: ცარიელი პასუხი. "
-                f"დასრულების მიზეზი: {choice.get('finish_reason')}"
+                f"{model_name} — პასუხი ცარიელია "
+                f"(finish_reason: {finish_reason})."
             )
 
         except requests.exceptions.Timeout:
             errors.append(
-                f"{model_name}: მოთხოვნას დრო გაუვიდა."
+                f"{model_name} — პასუხის მოლოდინის დრო ამოიწურა."
             )
 
         except requests.exceptions.RequestException as error:
             errors.append(
-                f"{model_name}: კავშირის შეცდომა — {error}"
+                f"{model_name} — კავშირის შეცდომა: {str(error)[:250]}"
             )
 
         except ValueError:
             errors.append(
-                f"{model_name}: სერვერის პასუხი JSON ფორმატში არ არის."
+                f"{model_name} — სერვერის პასუხი JSON ფორმატში არ არის."
             )
 
     return None, None, None, errors
@@ -147,14 +153,12 @@ if st.button("მიპასუხე") and question.strip():
         st.stop()
 
     with st.spinner("ნაცარქექია ფიქრობს..."):
-
         started_at = time.monotonic()
         search_context = ""
         results = []
 
         # ინტერნეტძიება
         if use_search and search_key:
-
             try:
                 search_response = requests.get(
                     "https://serpapi.com/search.json",
@@ -167,14 +171,9 @@ if st.button("მიპასუხე") and question.strip():
                     },
                     timeout=(5, 12),
                 )
-
                 search_response.raise_for_status()
                 search_data = search_response.json()
-
-                results = search_data.get(
-                    "organic_results",
-                    []
-                )
+                results = search_data.get("organic_results", [])
 
                 for item in results[:5]:
                     search_context += (
@@ -185,16 +184,16 @@ if st.button("მიპასუხე") and question.strip():
             except requests.exceptions.RequestException:
                 st.warning(
                     "ინტერნეტში ძიება ვერ დასრულდა. "
-                    "პასუხს ძიების გარეშე გავაგრძელებ."
+                    "პასუხს მოძიებული ინფორმაციის გარეშე გავაგრძელებ."
                 )
 
         elif use_search and not search_key:
             st.warning(
-                "ძიების გასაღები ვერ მოიძებნა. "
-                "პასუხს ძიების გარეშე გავაგრძელებ."
+                "SerpApi-ის გასაღები ვერ მოიძებნა. "
+                "პასუხს ინტერნეტძიების გარეშე გავაგრძელებ."
             )
 
-        # შეტყობინებების მომზადება
+        # ბოლო საუბრის კონტექსტი
         messages = [
             {
                 "role": "system",
@@ -202,9 +201,7 @@ if st.button("მიპასუხე") and question.strip():
             }
         ]
 
-        messages.extend(
-            st.session_state.chat_history[-8:]
-        )
+        messages.extend(st.session_state.chat_history[-8:])
 
         user_message = (
             f"მომხმარებლის კითხვა:\n{question}\n\n"
@@ -217,23 +214,27 @@ if st.button("მიპასუხე") and question.strip():
             "content": user_message,
         })
 
-        # პირველ და მეორე მოდელზე ცდა
-        answer, used_model, finish_reason, errors = ask_model(
+        answer, used_model, finish_reason, errors = ask_models(
             ai_key,
-            messages
+            messages,
         )
 
         if not answer:
-
             st.error(
                 "ნაცარქექიამ პასუხი ვერ მიიღო. "
-                "ორივე უფასო მოდელი მიუწვდომელია ან მოთხოვნის ლიმიტი ამოიწურა."
+                "ყველა უფასო მოდელი დროებით მიუწვდომელია, "
+                "ან მოთხოვნის ლიმიტი ამოიწურა."
             )
 
-            st.caption("ტექნიკური დეტალები:")
+            st.caption("მოდელების შეცდომები:")
             for error in errors:
                 st.code(error)
 
+            st.info(
+                "ცოტა ხანში სცადე ხელახლა. "
+                "თუ OpenRouter-ის საერთო დღიური ლიმიტი ამოიწურა, "
+                "სხვა უფასო მოდელიც შეიძლება ვერ იმუშაოს."
+            )
             st.stop()
 
         # პასუხის ჩვენება
@@ -260,7 +261,6 @@ if st.button("მიპასუხე") and question.strip():
             st.session_state.chat_history[-8:]
         )
 
-        # დრო და გამოყენებული მოდელი
         elapsed = time.monotonic() - started_at
 
         st.caption(
@@ -270,16 +270,11 @@ if st.button("მიპასუხე") and question.strip():
 
         # გამოყენებული წყაროები
         if results:
-
             st.subheader("გამოყენებული წყაროები")
 
             for item in results[:5]:
-
                 title = item.get("title", "წყარო")
                 link = item.get("link", "")
 
                 if link:
-                    st.markdown(
-                        f"- [{title}]({link})"
-                    )
-
+                    st.markdown(f"- [{title}]({link})")
