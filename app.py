@@ -8,11 +8,16 @@ import requests
 import streamlit as st
 
 
-# --------------------------------------------------
+# ==================================================
 # ძირითადი პარამეტრები
-# --------------------------------------------------
+# ==================================================
 
-st.set_page_config(page_title="ნაცარქექია", page_icon="🧠")
+st.set_page_config(
+    page_title="ნაცარქექია",
+    page_icon="🧠",
+    layout="centered"
+)
+
 st.title("🧠 ნაცარქექია")
 st.write("შენი პირადი ქართული AI ასისტენტი.")
 
@@ -63,9 +68,9 @@ MEMORY_PROMPT = """
 """.strip()
 
 
-# --------------------------------------------------
+# ==================================================
 # თარიღი — თბილისის დროით
-# --------------------------------------------------
+# ==================================================
 
 def current_date_context():
     now = datetime.now(ZoneInfo("Asia/Tbilisi"))
@@ -89,9 +94,9 @@ def current_date_context():
     )
 
 
-# --------------------------------------------------
+# ==================================================
 # Supabase — მეხსიერება
-# --------------------------------------------------
+# ==================================================
 
 def memory_config():
     url = st.secrets.get("SUPABASE_URL", "").strip().rstrip("/")
@@ -104,9 +109,7 @@ def memory_request(method, params=None, payload=None):
     url, key, owner = memory_config()
 
     if not url or not key or not owner:
-        raise RuntimeError(
-            "Supabase-ის Secrets სრულად შევსებული არ არის."
-        )
+        raise RuntimeError("Supabase-ის Secrets სრულად შევსებული არ არის.")
 
     headers = {
         "apikey": key,
@@ -159,9 +162,7 @@ def memory_request(method, params=None, payload=None):
         raise ValueError("უცნობი მოქმედება.")
 
     if not response.ok:
-        raise RuntimeError(
-            f"Supabase შეცდომა: HTTP {response.status_code}"
-        )
+        raise RuntimeError(f"Supabase შეცდომა: HTTP {response.status_code}")
 
     if method == "GET":
         return response.json()
@@ -207,9 +208,9 @@ def delete_memory(memory_id):
     )
 
 
-# --------------------------------------------------
+# ==================================================
 # AI მოდელები
-# --------------------------------------------------
+# ==================================================
 
 def call_model(api_key, model_name, messages, max_tokens=1400):
     response = requests.post(
@@ -232,9 +233,7 @@ def call_model(api_key, model_name, messages, max_tokens=1400):
     )
 
     if not response.ok:
-        raise RuntimeError(
-            f"HTTP {response.status_code}"
-        )
+        raise RuntimeError(f"HTTP {response.status_code}")
 
     data = response.json()
     choices = data.get("choices", [])
@@ -277,16 +276,14 @@ def ask_models(api_key, messages):
             return answer, actual_model, finish_reason, errors
 
         except Exception as error:
-            errors.append(
-                f"{model_name}: {str(error)[:200]}"
-            )
+            errors.append(f"{model_name}: {str(error)[:200]}")
 
     return None, None, None, errors
 
 
-# --------------------------------------------------
+# ==================================================
 # მეხსიერების შეთავაზებები
-# --------------------------------------------------
+# ==================================================
 
 def suggest_memory_actions(
     api_key,
@@ -396,9 +393,70 @@ def suggest_memory_actions(
     return clean
 
 
-# --------------------------------------------------
+# ==================================================
+# ინტერნეტძიების ფუნქცია
+# ==================================================
+
+def google_search(query, api_key, limit=10):
+    response = requests.get(
+        "https://serpapi.com/search.json",
+        params={
+            "engine": "google",
+            "q": query,
+            "api_key": api_key,
+            "hl": "ka",
+            "gl": "ge",
+            "google_domain": "google.ge",
+            "num": limit,
+        },
+        timeout=(5, 20),
+    )
+
+    response.raise_for_status()
+    return response.json()
+
+
+def prioritize_georgian_sources(results):
+    def rank(item):
+        link = item.get("link", "").lower()
+
+        preferred = (
+            ".ge/" in link
+            or link.endswith(".ge")
+            or ".gov.ge" in link
+            or ".edu.ge" in link
+        )
+
+        return 0 if preferred else 1
+
+    return sorted(results, key=rank)
+
+
+def display_search_results(results, limit=10):
+    for index, item in enumerate(results[:limit], start=1):
+        title = item.get("title", "უსათაურო შედეგი")
+        link = item.get("link", "")
+        snippet = item.get(
+            "snippet",
+            "აღწერა ხელმისაწვდომი არ არის."
+        )
+        domain = item.get("displayed_link", "")
+
+        if link:
+            st.markdown(f"**{index}. [{title}]({link})**")
+        else:
+            st.markdown(f"**{index}. {title}**")
+
+        if domain:
+            st.caption(domain)
+
+        st.write(snippet)
+        st.divider()
+
+
+# ==================================================
 # Streamlit სესია
-# --------------------------------------------------
+# ==================================================
 
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
@@ -410,9 +468,9 @@ if "memory_notice" not in st.session_state:
     st.session_state.memory_notice = ""
 
 
-# --------------------------------------------------
+# ==================================================
 # გვერდითი პანელი — მეხსიერება
-# --------------------------------------------------
+# ==================================================
 
 st.sidebar.header("🧠 ნაცარქექიას მეხსიერება")
 st.sidebar.caption("შენ აკონტროლებ შენახულ ინფორმაციას.")
@@ -434,14 +492,10 @@ if st.sidebar.button("დამატება", key="manual_add"):
             )
 
             if duplicate:
-                st.sidebar.info(
-                    "ეს ინფორმაცია უკვე შენახულია."
-                )
+                st.sidebar.info("ეს ინფორმაცია უკვე შენახულია.")
             else:
                 save_memory(manual_memory.strip())
-                st.sidebar.success(
-                    "ინფორმაცია შენახულია."
-                )
+                st.sidebar.success("ინფორმაცია შენახულია.")
                 st.rerun()
 
         except Exception as error:
@@ -458,9 +512,7 @@ try:
 except Exception:
     memories = []
     memory_ready = False
-    st.sidebar.error(
-        "მეხსიერების ბაზასთან კავშირი ვერ შედგა."
-    )
+    st.sidebar.error("მეხსიერების ბაზასთან კავშირი ვერ შედგა.")
 
 
 st.sidebar.subheader("შენახული ჩანაწერები")
@@ -511,9 +563,9 @@ elif memory_ready:
     st.sidebar.caption("მეხსიერება ჯერ ცარიელია.")
 
 
-# --------------------------------------------------
+# ==================================================
 # მეხსიერების შეთავაზებების დადასტურება
-# --------------------------------------------------
+# ==================================================
 
 if st.session_state.memory_notice:
     st.success(st.session_state.memory_notice)
@@ -531,12 +583,8 @@ if st.session_state.pending_memories:
         st.session_state.pending_memories
     ):
         if candidate["action"] == "update":
-            st.caption(
-                f"ძველი: {candidate['old_memory']}"
-            )
-            st.write(
-                f"ახალი: {candidate['memory']}"
-            )
+            st.caption(f"ძველი: {candidate['old_memory']}")
+            st.write(f"ახალი: {candidate['memory']}")
         else:
             st.write(candidate["memory"])
 
@@ -551,9 +599,7 @@ if st.session_state.pending_memories:
                 try:
                     if candidate["action"] == "add":
                         save_memory(candidate["memory"])
-                        notice = (
-                            "ახალი ინფორმაცია დავიმახსოვრე."
-                        )
+                        notice = "ახალი ინფორმაცია დავიმახსოვრე."
                     else:
                         update_memory(
                             candidate["id"],
@@ -582,235 +628,311 @@ if st.session_state.pending_memories:
         st.rerun()
 
 
-# --------------------------------------------------
+# ==================================================
+# მთავარი განყოფილებები
+# ==================================================
+
+chat_tab, search_tab = st.tabs([
+    "💬 ჩატი",
+    "🔎 ქართული ძიება",
+])
+
+
+# ==================================================
 # ჩატი
-# --------------------------------------------------
+# ==================================================
 
-question = st.text_input("მკითხე რამე:")
+with chat_tab:
 
-use_search = st.checkbox(
-    "ინტერნეტშიც მოძებნე პასუხი",
-    value=False,
-)
+    question = st.text_input(
+        "მკითხე რამე:",
+        key="chat_question"
+    )
 
-check_quality = st.checkbox(
-    "პასუხი ქართულად გადაამოწმე",
-    value=True,
-)
+    use_search = st.checkbox(
+        "ინტერნეტშიც მოძებნე პასუხი",
+        value=False,
+        key="chat_use_search"
+    )
 
+    check_quality = st.checkbox(
+        "პასუხი ქართულად გადაამოწმე",
+        value=True,
+        key="chat_check_quality"
+    )
 
-if st.button("მიპასუხე") and question.strip():
+    if st.button("მიპასუხე", key="chat_submit") and question.strip():
 
-    ai_key = st.secrets.get("OPENROUTER_API_KEY", "")
-    search_key = st.secrets.get("SERPAPI_API_KEY", "")
+        ai_key = st.secrets.get("OPENROUTER_API_KEY", "").strip()
+        search_key = st.secrets.get("SERPAPI_API_KEY", "").strip()
 
-    if not ai_key:
-        st.error(
-            "OpenRouter-ის გასაღები ვერ მოიძებნა."
-        )
-        st.stop()
-
-    with st.spinner("ნაცარქექია ფიქრობს..."):
-
-        started_at = time.monotonic()
-        search_context = ""
-        results = []
-
-        # ინტერნეტძიება
-        if use_search and search_key:
-            try:
-                search_response = requests.get(
-                    "https://serpapi.com/search.json",
-                    params={
-                        "engine": "google",
-                        "q": question,
-                        "api_key": search_key,
-                        "hl": "ka",
-                        "gl": "ge",
-                    },
-                    timeout=(5, 12),
-                )
-
-                search_response.raise_for_status()
-                search_data = search_response.json()
-                results = search_data.get(
-                    "organic_results",
-                    [],
-                )
-
-                for item in results[:5]:
-                    search_context += (
-                        f"\nსათაური: {item.get('title', '')}\n"
-                        f"აღწერა: {item.get('snippet', '')}\n"
-                    )
-
-            except Exception:
-                st.warning(
-                    "ინტერნეტძიება ვერ შესრულდა."
-                )
-
-        elif use_search and not search_key:
-            st.warning(
-                "SerpApi-ის გასაღები ვერ მოიძებნა."
-            )
-
-        # მიმდინარე თარიღი
-        date_context = current_date_context()
-
-        # მეხსიერება
-        memory_context = "\n".join(
-            f"- {item['memory']}"
-            for item in memories
-        )
-
-        messages = [
-            {
-                "role": "system",
-                "content": SYSTEM_PROMPT,
-            }
-        ]
-
-        if memory_context:
-            messages.append({
-                "role": "system",
-                "content": (
-                    "ეს არის მომხმარებლის მიერ შენახული ინფორმაცია. "
-                    "გამოიყენე მხოლოდ მაშინ, როცა კითხვას ეხება:\n"
-                    + memory_context
-                ),
-            })
-
-        messages.extend(
-            st.session_state.chat_history[-8:]
-        )
-
-        user_message = (
-            f"{date_context}\n\n"
-            f"მომხმარებლის კითხვა:\n{question}\n\n"
-            f"ინტერნეტში მოძიებული ინფორმაცია:\n"
-            f"{search_context}\n\n"
-            "თუ კითხვა თარიღს ეხება, დაეყრდენი მოცემულ "
-            "მიმდინარე თარიღს. "
-            "თუ ინტერნეტში მოძიებული ინფორმაცია არსებობს, "
-            "გამოიყენე ის შესაბამისი კითხვებისთვის. "
-            "არ მოიგონო ფაქტები ან წყაროები. "
-            "მიპასუხე გამართული, ბუნებრივი ქართულით."
-        )
-
-        messages.append({
-            "role": "user",
-            "content": user_message,
-        })
-
-        # AI პასუხი
-        answer, used_model, finish_reason, errors = ask_models(
-            ai_key,
-            messages,
-        )
-
-        if not answer:
-            st.error(
-                "უფასო მოდელები ამჟამად მიუწვდომელია."
-            )
-
-            for error in errors:
-                st.code(error)
-
+        if not ai_key:
+            st.error("OpenRouter-ის გასაღები ვერ მოიძებნა.")
             st.stop()
 
-        # ქართული ტექსტის შემოწმება
-        quality_checked = False
+        with st.spinner("ნაცარქექია ფიქრობს..."):
 
-        if check_quality:
-            with st.spinner("ქართულს ვამოწმებ..."):
+            started_at = time.monotonic()
+            search_context = ""
+            results = []
+
+            if use_search and search_key:
                 try:
-                    reviewed, _, _ = call_model(
-                        ai_key,
-                        used_model,
-                        [
-                            {
-                                "role": "system",
-                                "content": REVIEW_PROMPT,
-                            },
-                            {
-                                "role": "user",
-                                "content": (
-                                    f"კითხვა:\n{question}\n\n"
-                                    f"პასუხი:\n{answer}"
-                                ),
-                            },
-                        ],
-                        max_tokens=1500,
+                    search_data = google_search(
+                        question,
+                        search_key,
+                        limit=5
                     )
 
-                    answer = reviewed
-                    quality_checked = True
+                    results = search_data.get("organic_results", [])
+
+                    for item in results[:5]:
+                        search_context += (
+                            f"\nსათაური: {item.get('title', '')}\n"
+                            f"აღწერა: {item.get('snippet', '')}\n"
+                        )
+
+                except Exception:
+                    st.warning("ინტერნეტძიება ვერ შესრულდა.")
+
+            elif use_search and not search_key:
+                st.warning("SerpApi-ის გასაღები ვერ მოიძებნა.")
+
+            date_context = current_date_context()
+
+            memory_context = "\n".join(
+                f"- {item['memory']}"
+                for item in memories
+            )
+
+            messages = [
+                {
+                    "role": "system",
+                    "content": SYSTEM_PROMPT,
+                }
+            ]
+
+            if memory_context:
+                messages.append({
+                    "role": "system",
+                    "content": (
+                        "ეს არის მომხმარებლის მიერ შენახული ინფორმაცია. "
+                        "გამოიყენე მხოლოდ მაშინ, როცა კითხვას ეხება:\n"
+                        + memory_context
+                    ),
+                })
+
+            messages.extend(
+                st.session_state.chat_history[-8:]
+            )
+
+            user_message = (
+                f"{date_context}\n\n"
+                f"მომხმარებლის კითხვა:\n{question}\n\n"
+                f"ინტერნეტში მოძიებული ინფორმაცია:\n"
+                f"{search_context}\n\n"
+                "თუ კითხვა თარიღს ეხება, დაეყრდენი მოცემულ "
+                "მიმდინარე თარიღს. "
+                "თუ ინტერნეტში მოძიებული ინფორმაცია არსებობს, "
+                "გამოიყენე ის შესაბამისი კითხვებისთვის. "
+                "არ მოიგონო ფაქტები ან წყაროები. "
+                "მიპასუხე გამართული, ბუნებრივი ქართულით."
+            )
+
+            messages.append({
+                "role": "user",
+                "content": user_message,
+            })
+
+            answer, used_model, finish_reason, errors = ask_models(
+                ai_key,
+                messages,
+            )
+
+            if not answer:
+                st.error("უფასო მოდელები ამჟამად მიუწვდომელია.")
+
+                for error in errors:
+                    st.code(error)
+
+                st.stop()
+
+            quality_checked = False
+
+            if check_quality:
+                with st.spinner("ქართულს ვამოწმებ..."):
+                    try:
+                        reviewed, _, _ = call_model(
+                            ai_key,
+                            used_model,
+                            [
+                                {
+                                    "role": "system",
+                                    "content": REVIEW_PROMPT,
+                                },
+                                {
+                                    "role": "user",
+                                    "content": (
+                                        f"კითხვა:\n{question}\n\n"
+                                        f"პასუხი:\n{answer}"
+                                    ),
+                                },
+                            ],
+                            max_tokens=1500,
+                        )
+
+                        answer = reviewed
+                        quality_checked = True
+
+                    except Exception:
+                        pass
+
+            st.subheader("ნაცარქექიას პასუხი")
+            st.write(answer)
+
+            if finish_reason == "length":
+                st.warning("პასუხი შესაძლოა ბოლომდე არ დასრულებულა.")
+
+            if quality_checked:
+                st.caption("ქართული ტექსტი დამატებით შემოწმებულია.")
+
+            st.session_state.chat_history.append({
+                "role": "user",
+                "content": user_message,
+            })
+
+            st.session_state.chat_history.append({
+                "role": "assistant",
+                "content": answer,
+            })
+
+            st.session_state.chat_history = (
+                st.session_state.chat_history[-8:]
+            )
+
+            if memory_ready:
+                try:
+                    suggestions = suggest_memory_actions(
+                        ai_key,
+                        used_model,
+                        question,
+                        memories,
+                    )
+
+                    if suggestions:
+                        st.session_state.pending_memories = suggestions
 
                 except Exception:
                     pass
 
-        # პასუხის ჩვენება
-        st.subheader("ნაცარქექიას პასუხი")
-        st.write(answer)
+            elapsed = time.monotonic() - started_at
 
-        if finish_reason == "length":
-            st.warning(
-                "პასუხი შესაძლოა ბოლომდე არ დასრულებულა."
-            )
-
-        if quality_checked:
             st.caption(
-                "ქართული ტექსტი დამატებით შემოწმებულია."
+                f"პასუხის დრო: {elapsed:.1f} წამი | "
+                f"მოდელი: {used_model}"
             )
 
-        # საუბრის ისტორია
-        st.session_state.chat_history.append({
-            "role": "user",
-            "content": user_message,
-        })
+            if results:
+                st.subheader("გამოყენებული წყაროები")
 
-        st.session_state.chat_history.append({
-            "role": "assistant",
-            "content": answer,
-        })
+                for item in results[:5]:
+                    title = item.get("title", "წყარო")
+                    link = item.get("link", "")
 
-        st.session_state.chat_history = (
-            st.session_state.chat_history[-8:]
+                    if link:
+                        st.markdown(f"- [{title}]({link})")
+
+        if st.session_state.pending_memories:
+            st.rerun()
+
+
+# ==================================================
+# ცალკე ქართული ძიება
+# ==================================================
+
+with search_tab:
+
+    st.header("🔎 ქართული ძიება")
+
+    st.write(
+        "მოძებნე ქართული სტატიები, საქართველოს შესახებ ინფორმაცია "
+        "და სხვა ვებწყაროები."
+    )
+
+    st.caption(
+        "ქართული წყაროები პრიორიტეტულია. "
+        "თუ საჭირო ინფორმაცია ქართულად არ მოიძებნა, "
+        "სხვა ენაზეც გამოჩნდება შედეგები."
+    )
+
+    with st.form("georgian_search_form"):
+
+        search_query = st.text_input(
+            "რას ეძებ?",
+            placeholder="მაგალითად: საქართველოს ისტორია..."
         )
 
-        # მეხსიერების მოქმედებების შეთავაზება
-        if memory_ready:
-            try:
-                suggestions = suggest_memory_actions(
-                    ai_key,
-                    used_model,
-                    question,
-                    memories,
-                )
-
-                if suggestions:
-                    st.session_state.pending_memories = suggestions
-
-            except Exception:
-                pass
-
-        elapsed = time.monotonic() - started_at
-
-        st.caption(
-            f"პასუხის დრო: {elapsed:.1f} წამი | "
-            f"მოდელი: {used_model}"
+        submitted_search = st.form_submit_button(
+            "მოძებნე 🔍",
+            use_container_width=True
         )
 
-        # წყაროები
-        if results:
-            st.subheader("გამოყენებული წყაროები")
+    if submitted_search and search_query.strip():
 
-            for item in results[:5]:
-                title = item.get("title", "წყარო")
-                link = item.get("link", "")
+        search_key = st.secrets.get(
+            "SERPAPI_API_KEY",
+            ""
+        ).strip()
 
-                if link:
-                    st.markdown(f"- [{title}]({link})")
+        if not search_key:
+            st.error(
+                "SerpApi-ის გასაღები ვერ მოიძებნა Streamlit Secrets-ში."
+            )
 
-    if st.session_state.pending_memories:
-        st.rerun()
+        else:
+
+            with st.spinner("ნაცარქექია ქართულ ინფორმაციას ეძებს..."):
+
+                try:
+                    search_data = google_search(
+                        search_query.strip(),
+                        search_key,
+                        limit=10
+                    )
+
+                    organic_results = search_data.get(
+                        "organic_results",
+                        []
+                    )
+
+                    organic_results = prioritize_georgian_sources(
+                        organic_results
+                    )
+
+                    if organic_results:
+
+                        st.success(
+                            f"ნაპოვნია {len(organic_results)} შედეგი."
+                        )
+
+                        display_search_results(
+                            organic_results,
+                            limit=10
+                        )
+
+                    else:
+                        st.info(
+                            "შედეგები ვერ მოიძებნა. "
+                            "სცადე სხვა სიტყვებით ძიება."
+                        )
+
+                except requests.RequestException:
+                    st.error(
+                        "ძიების სერვისთან კავშირი ვერ შედგა. "
+                        "ცოტა ხანში თავიდან სცადე."
+                    )
+
+                except Exception:
+                    st.error(
+                        "ძიებისას მოულოდნელი შეცდომა მოხდა."
+                    )
