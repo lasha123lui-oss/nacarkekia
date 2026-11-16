@@ -1,8 +1,8 @@
-
 import json
 import time
 from datetime import datetime
 from zoneinfo import ZoneInfo
+from urllib.parse import quote_plus
 
 import requests
 import streamlit as st
@@ -391,9 +391,7 @@ def suggest_memory_actions(
             })
 
     return clean
-
-
-# ==================================================
+    # ==================================================
 # ინტერნეტძიების ფუნქცია
 # ==================================================
 
@@ -660,8 +658,7 @@ with chat_tab:
         value=True,
         key="chat_check_quality"
     )
-
-    if st.button("მიპასუხე", key="chat_submit") and question.strip():
+        if st.button("მიპასუხე", key="chat_submit") and question.strip():
 
         ai_key = st.secrets.get("OPENROUTER_API_KEY", "").strip()
         search_key = st.secrets.get("SERPAPI_API_KEY", "").strip()
@@ -847,7 +844,7 @@ with chat_tab:
 
 
 # ==================================================
-# ცალკე ქართული ძიება
+# ცალკე ქართული ძიება — გარე Google
 # ==================================================
 
 with search_tab:
@@ -860,16 +857,15 @@ with search_tab:
     )
 
     st.caption(
-        "ქართული წყაროები პრიორიტეტულია. "
-        "თუ საჭირო ინფორმაცია ქართულად არ მოიძებნა, "
-        "სხვა ენაზეც გამოჩნდება შედეგები."
+        "ძიება იხსნება Google-ში. ქართული ენა და საქართველოს რეგიონი "
+        "წინასწარ არის მითითებული."
     )
 
     with st.form("georgian_search_form"):
 
         search_query = st.text_input(
             "რას ეძებ?",
-            placeholder="მაგალითად: საქართველოს ისტორია..."
+            placeholder="მაგალითად: ახალი ამბები საქართველოში..."
         )
 
         submitted_search = st.form_submit_button(
@@ -877,62 +873,24 @@ with search_tab:
             use_container_width=True
         )
 
-    if submitted_search and search_query.strip():
+    if submitted_search:
 
-        search_key = st.secrets.get(
-            "SERPAPI_API_KEY",
-            ""
-        ).strip()
+        if search_query.strip():
 
-        if not search_key:
-            st.error(
-                "SerpApi-ის გასაღები ვერ მოიძებნა Streamlit Secrets-ში."
+            google_url = (
+                "https://www.google.com/search"
+                f"?q={quote_plus(search_query.strip())}"
+                "&hl=ka"
+                "&gl=ge"
+            )
+
+            st.success("მზადაა! Google-ის ძიების გასახსნელად დააჭირე ღილაკს:")
+
+            st.link_button(
+                "🔎 Google-ში შედეგების ნახვა",
+                google_url,
+                use_container_width=True
             )
 
         else:
-
-            with st.spinner("ნაცარქექია ქართულ ინფორმაციას ეძებს..."):
-
-                try:
-                    search_data = google_search(
-                        search_query.strip(),
-                        search_key,
-                        limit=10
-                    )
-
-                    organic_results = search_data.get(
-                        "organic_results",
-                        []
-                    )
-
-                    organic_results = prioritize_georgian_sources(
-                        organic_results
-                    )
-
-                    if organic_results:
-
-                        st.success(
-                            f"ნაპოვნია {len(organic_results)} შედეგი."
-                        )
-
-                        display_search_results(
-                            organic_results,
-                            limit=10
-                        )
-
-                    else:
-                        st.info(
-                            "შედეგები ვერ მოიძებნა. "
-                            "სცადე სხვა სიტყვებით ძიება."
-                        )
-
-                except requests.RequestException:
-                    st.error(
-                        "ძიების სერვისთან კავშირი ვერ შედგა. "
-                        "ცოტა ხანში თავიდან სცადე."
-                    )
-
-                except Exception:
-                    st.error(
-                        "ძიებისას მოულოდნელი შეცდომა მოხდა."
-                    )
+            st.warning("ჯერ ჩაწერე, რას ეძებ.")
