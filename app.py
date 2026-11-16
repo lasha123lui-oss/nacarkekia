@@ -1,3 +1,4 @@
+
 import json
 import time
 from datetime import datetime
@@ -391,7 +392,9 @@ def suggest_memory_actions(
             })
 
     return clean
-    # ==================================================
+
+
+# ==================================================
 # ინტერნეტძიების ფუნქცია
 # ==================================================
 
@@ -658,7 +661,9 @@ with chat_tab:
         value=True,
         key="chat_check_quality"
     )
-        if st.button("მიპასუხე", key="chat_submit") and question.strip():
+
+    # აქ არის გასწორებული შეწევა
+    if st.button("მიპასუხე", key="chat_submit") and question.strip():
 
         ai_key = st.secrets.get("OPENROUTER_API_KEY", "").strip()
         search_key = st.secrets.get("SERPAPI_API_KEY", "").strip()
